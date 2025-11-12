@@ -126,7 +126,9 @@ final class HomeDashboardViewController: UIViewController {
     }
 
     @objc private func bellTapped() {
-        print("🔔 Notifications tapped")
+        let notificationsVC = NotificationsViewController()
+        notificationsVC.hidesBottomBarWhenPushed = true
+        navigationController?.pushViewController(notificationsVC, animated: true)
     }
 
     // MARK: - Navigation to Comment or Share
