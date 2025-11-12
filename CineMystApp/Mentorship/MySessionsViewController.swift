@@ -88,10 +88,10 @@ class SessionsViewController: UIViewController, UITableViewDelegate, UITableView
 
     private func loadData() {
         allSessions = [
-            Session(name: "Sanya Sawi", title: "Senior Director", date: "May 15 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Meet link shared on your mail id", rating: 4.9, status: .upcoming, image: UIImage(systemName: "person.circle.fill")),
-            Session(name: "Swati Jha", title: "Senior Actor", date: "May 17 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Meet link shared on your mail id", rating: 4.9, status: .upcoming, image: UIImage(systemName: "person.circle.fill")),
-            Session(name: "Amit Sawi", title: "Actor", date: "May 15 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Completed", rating: 4.9, status: .past, image: UIImage(systemName: "person.circle.fill")),
-            Session(name: "Amit Sawi", title: "Actor", date: "May 15 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Canceled", rating: 4.9, status: .canceled, image: UIImage(systemName: "person.circle.fill"))
+            Session(name: "Sanya Sawi", title: "Senior Director", date: "May 15 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Meet link shared on your mail id", rating: 4.9, status: .upcoming, image: UIImage(named: "Image")),
+            Session(name: "Swati Jha", title: "Senior Actor", date: "May 17 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Meet link shared on your mail id", rating: 4.9, status: .upcoming, image: UIImage(named: "Image")),
+            Session(name: "Amit Sawi", title: "Actor", date: "May 15 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Completed", rating: 4.9, status: .past, image: UIImage(named: "Image")),
+            Session(name: "Amit Sawi", title: "Actor", date: "May 15 2025", time: "3:00 PM", services: ["Acting", "Dubbing"], note: "Canceled", rating: 4.9, status: .canceled, image: UIImage(named: "Image"))
         ]
     }
 
