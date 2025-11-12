@@ -11,6 +11,7 @@ final class HomeDashboardViewController: UIViewController {
 
     // MARK: - Views
     private let tableView = UITableView(frame: .zero, style: .plain)
+    private let searchController = UISearchController(searchResultsController: nil)
 
     // MARK: - Data
     private var posts: [Post] = []
@@ -46,12 +47,13 @@ final class HomeDashboardViewController: UIViewController {
 
         navigationItem.rightBarButtonItems = [bellButton, profileButton]
 
-        // Add search controller
-        let searchController = UISearchController(searchResultsController: nil)
+        // Configure SearchController
         searchController.searchBar.placeholder = "Search posts or jobs"
         searchController.obscuresBackgroundDuringPresentation = false
+        searchController.searchBar.delegate = self
         navigationItem.searchController = searchController
         navigationItem.hidesSearchBarWhenScrolling = false
+        definesPresentationContext = true
     }
 
     // MARK: - Setup Table
@@ -85,7 +87,7 @@ final class HomeDashboardViewController: UIViewController {
                  likes: 120, comments: 35, shares: 15,
                  imageName: "emma",
                  userImageName: "avatar_rani"),
-            
+
             Post(username: "Ava Raj",
                  title: "Director • 2h",
                  caption: "Excited to announce our next casting call!",
@@ -103,7 +105,7 @@ final class HomeDashboardViewController: UIViewController {
                 applicants: 8,
                 daysLeft: 2,
                 logoName: "jobicon"),
-            
+
             Job(role: "Assistant Director - Feature Film",
                 company: "Red Chillies Entertainment",
                 location: "Mumbai, India",
@@ -149,6 +151,16 @@ final class HomeDashboardViewController: UIViewController {
     }
 }
 
+// MARK: - UISearchBarDelegate
+extension HomeDashboardViewController: UISearchBarDelegate {
+    func searchBarShouldBeginEditing(_ searchBar: UISearchBar) -> Bool {
+        // Navigate to Search Screen when search bar is tapped
+        let searchVC = SearchViewController()
+        navigationController?.pushViewController(searchVC, animated: true)
+        return false
+    }
+}
+
 // MARK: - TableView
 extension HomeDashboardViewController: UITableViewDataSource, UITableViewDelegate {
 
@@ -177,7 +189,6 @@ extension HomeDashboardViewController: UITableViewDataSource, UITableViewDelegat
 
                 self.navigationController?.pushViewController(profileVC, animated: true)
             }
-
 
             // ✅ Handle comment tap
             cell.commentTapped = { [weak self] in
