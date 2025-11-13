@@ -249,10 +249,33 @@ final class SessionDetailViewController: UIViewController {
     }
 
     @objc private func didTapReschedule() {
-        let a = UIAlertController(title: "Reschedule", message: "Reschedule tapped", preferredStyle: .alert)
-        a.addAction(UIAlertAction(title: "OK", style: .default))
-        present(a, animated: true)
+        let rescheduleVC = RescheduleViewController(session: session)
+        rescheduleVC.onReschedule = { [weak self] newDate, slot in
+            guard let self = self else { return }
+            // Update session in SessionStore (demo: create a new Session object)
+            let updated = Session(
+                id: self.session.id,
+                mentorId: self.session.mentorId,
+                mentorName: self.session.mentorName,
+                mentorRole: self.session.mentorRole,
+                date: newDate,
+                createdAt: self.session.createdAt,
+                mentorImageName: self.session.mentorImageName
+            )
+            // Replace existing session: simple approach -> remove old and add updated
+            SessionStore.shared.remove(id: self.session.id)
+            SessionStore.shared.add(updated)
+
+            // Optionally show confirmation
+            let a = UIAlertController(title: "Rescheduled", message: "Your session was moved to \(slot) on \(DateFormatter.localizedString(from: newDate, dateStyle: .medium, timeStyle: .short))", preferredStyle: .alert)
+            a.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(a, animated: true)
+        }
+
+        // push or present
+        navigationController?.pushViewController(rescheduleVC, animated: true)
     }
+
 
     @objc private func didTapCancel() {
         let ac = UIAlertController(title: "Cancel Session", message: "Are you sure you want to cancel this session?", preferredStyle: .alert)
