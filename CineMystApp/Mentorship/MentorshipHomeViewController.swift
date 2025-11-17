@@ -363,9 +363,8 @@ final class MentorshipHomeViewController: UIViewController {
     }
 
     @objc private func didTapBecomeMentor() {
-        let vc = UIViewController()
-        vc.view.backgroundColor = .systemBackground
-        vc.title = "Become Mentor"
+        let vc = BecomeMentorViewController()
+        vc.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(vc, animated: true)
     }
 
