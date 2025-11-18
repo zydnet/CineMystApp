@@ -176,9 +176,7 @@ final class ScheduleSessionViewController: UIViewController {
 
         // Hide tabbar & floating button while inside scheduling flow
         tabBarController?.tabBar.isHidden = true
-        if let cineTab = tabBarController as? CineMystTabBarController {
-            cineTab.setFloatingButtonVisible(false, animated: false)
-        }
+       
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -186,9 +184,7 @@ final class ScheduleSessionViewController: UIViewController {
 
         // restore
         tabBarController?.tabBar.isHidden = false
-        if let cineTab = tabBarController as? CineMystTabBarController {
-            cineTab.setFloatingButtonVisible(true, animated: false)
-        }
+      
     }
 
     // MARK: - Mentorship chips

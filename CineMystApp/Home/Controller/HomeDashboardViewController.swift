@@ -13,6 +13,20 @@ final class HomeDashboardViewController: UIViewController {
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let searchController = UISearchController(searchResultsController: nil)
 
+    // MARK: - Floating Button
+    private let floatingButton: UIButton = {
+        let button = UIButton(type: .custom)
+        button.backgroundColor = UIColor.systemPurple
+        button.setImage(UIImage(systemName: "plus"), for: .normal)
+        button.tintColor = .white
+        button.layer.cornerRadius = 30
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOpacity = 0.3
+        button.layer.shadowOffset = CGSize(width: 0, height: 4)
+        button.layer.shadowRadius = 6
+        return button
+    }()
+
     // MARK: - Data
     private var posts: [Post] = []
     private var jobs: [Job] = []
@@ -24,6 +38,7 @@ final class HomeDashboardViewController: UIViewController {
         setupNavigationBar()
         setupTable()
         loadDummyData()
+        setupFloatingButton()     // ← ADDED
         navigationItem.backButtonTitle = ""
     }
 
@@ -47,7 +62,6 @@ final class HomeDashboardViewController: UIViewController {
 
         navigationItem.rightBarButtonItems = [bellButton, profileButton]
 
-        // Configure SearchController
         searchController.searchBar.placeholder = "Search posts or jobs"
         searchController.obscuresBackgroundDuringPresentation = false
         searchController.searchBar.delegate = self
@@ -76,6 +90,31 @@ final class HomeDashboardViewController: UIViewController {
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
+    }
+
+    // MARK: - Floating Button Setup
+    private func setupFloatingButton() {
+        view.addSubview(floatingButton)
+
+        floatingButton.translatesAutoresizingMaskIntoConstraints = false
+
+        NSLayoutConstraint.activate([
+            floatingButton.widthAnchor.constraint(equalToConstant: 60),
+            floatingButton.heightAnchor.constraint(equalToConstant: 60),
+            floatingButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            floatingButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20)
+        ])
+
+        floatingButton.addTarget(self, action: #selector(floatingButtonTapped), for: .touchUpInside)
+    }
+
+    @objc private func floatingButtonTapped() {
+        print("Floating + Button tapped!")
+
+        // Add your navigation here
+        // Example:
+        // let createVC = CreatePostViewController()
+        // navigationController?.pushViewController(createVC, animated: true)
     }
 
     // MARK: - Dummy Data
@@ -156,7 +195,6 @@ final class HomeDashboardViewController: UIViewController {
 // MARK: - UISearchBarDelegate
 extension HomeDashboardViewController: UISearchBarDelegate {
     func searchBarShouldBeginEditing(_ searchBar: UISearchBar) -> Bool {
-        // Navigate to Search Screen when search bar is tapped
         let searchVC = SearchViewController()
         navigationController?.pushViewController(searchVC, animated: true)
         return false
@@ -174,39 +212,39 @@ extension HomeDashboardViewController: UITableViewDataSource, UITableViewDelegat
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         if indexPath.section == 0 {
-            let cell = tableView.dequeueReusableCell(withIdentifier: PostCellTableViewCell.reuseId, for: indexPath) as! PostCellTableViewCell
+            let cell = tableView.dequeueReusableCell(
+                withIdentifier: PostCellTableViewCell.reuseId,
+                for: indexPath
+            ) as! PostCellTableViewCell
+
             let post = posts[indexPath.row]
             cell.configure(with: post)
 
-            // ✅ Handle profile tap navigation
             cell.profileTapped = { [weak self] in
                 guard let self = self else { return }
                 let profileVC = ProfileViewController()
                 profileVC.hidesBottomBarWhenPushed = true
 
-                // ✅ Hide floating button while in profile
-                if let tabBarController = self.tabBarController as? CineMystTabBarController {
-                    tabBarController.setFloatingButtonVisible(false)
-                }
 
                 self.navigationController?.pushViewController(profileVC, animated: true)
             }
 
-            // ✅ Handle comment tap
             cell.commentTapped = { [weak self] in
-                guard let self = self else { return }
-                self.openComments(for: post)
+                self?.openComments(for: post)
             }
 
-            // ✅ Handle share tap
             cell.shareTapped = { [weak self] in
-                guard let self = self else { return }
-                self.openShareSheet(for: post)
+                self?.openShareSheet(for: post)
             }
 
             return cell
+
         } else {
-            let cell = tableView.dequeueReusableCell(withIdentifier: JobCardCell.reuseId, for: indexPath) as! JobCardCell
+            let cell = tableView.dequeueReusableCell(
+                withIdentifier: JobCardCell.reuseId,
+                for: indexPath
+            ) as! JobCardCell
+
             cell.configure(with: jobs[indexPath.row])
             return cell
         }

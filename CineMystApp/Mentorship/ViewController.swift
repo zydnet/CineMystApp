@@ -190,9 +190,7 @@ As a Senior Director, I lead cross-functional teams to craft user-centered digit
         // Hide tab bar (if this VC was pushed with hidesBottomBarWhenPushed = true it will be hidden automatically)
         tabBarController?.tabBar.isHidden = true
         // Hide the floating button if our tab bar controller is CineMystTabBarController
-        if let cineTab = tabBarController as? CineMystTabBarController {
-            cineTab.setFloatingButtonVisible(false, animated: false)
-        }
+       
 
         // Transparent navigation bar
         let appearance = UINavigationBarAppearance()
@@ -206,9 +204,7 @@ As a Senior Director, I lead cross-functional teams to craft user-centered digit
 
         // Restore tab bar and floating button
         tabBarController?.tabBar.isHidden = false
-        if let cineTab = tabBarController as? CineMystTabBarController {
-            cineTab.setFloatingButtonVisible(true, animated: false)
-        }
+      
     }
 
     override func viewDidLayoutSubviews() {

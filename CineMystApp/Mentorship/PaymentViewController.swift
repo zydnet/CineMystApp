@@ -124,22 +124,18 @@ final class PaymentViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
 
-        // Hide the tab bar and floating + button while on payment screen
+        // Hide tab bar only
         tabBarController?.tabBar.isHidden = true
-        if let cineTab = tabBarController as? CineMystTabBarController {
-            cineTab.setFloatingButtonVisible(false, animated: false)
-        }
     }
+
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
 
-        // Restore tab bar and floating + button when leaving
+        // Restore tab bar only
         tabBarController?.tabBar.isHidden = false
-        if let cineTab = tabBarController as? CineMystTabBarController {
-            cineTab.setFloatingButtonVisible(true, animated: false)
-        }
     }
+
 
     // MARK: Actions
     private func wireActions() {
