@@ -8,7 +8,7 @@ import UIKit
 final class SessionDetailViewController: UIViewController {
 
     // The session to display (must be set by the caller)
-    var session: Session!
+    var session: SessionM!
 
     // Theme color
     private let plum = UIColor(red: 0x43/255, green: 0x16/255, blue: 0x31/255, alpha: 1)
@@ -253,7 +253,7 @@ final class SessionDetailViewController: UIViewController {
         rescheduleVC.onReschedule = { [weak self] newDate, slot in
             guard let self = self else { return }
             // Update session in SessionStore (demo: create a new Session object)
-            let updated = Session(
+            let updated = SessionM(
                 id: self.session.id,
                 mentorId: self.session.mentorId,
                 mentorName: self.session.mentorName,

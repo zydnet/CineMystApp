@@ -13,12 +13,12 @@ final class SessionStore {
     static let shared = SessionStore()
 
     // stored sessions (readable from outside, mutated only via API below)
-    private(set) var sessions: [Session] = []
+    private(set) var sessions: [SessionM] = []
 
     private init() {}
 
     /// Add a new session (latest first)
-    func add(_ session: Session) {
+    func add(_ session: SessionM) {
         sessions.insert(session, at: 0)
         NotificationCenter.default.post(name: .sessionUpdated, object: nil, userInfo: ["added": session])
         print("[SessionStore] added session id=\(session.id) mentor=\(session.mentorName) date=\(session.date) image=\(session.mentorImageName)")
@@ -38,7 +38,7 @@ final class SessionStore {
     }
 
     /// Return a copy of all sessions
-    func all() -> [Session] {
+    func all() -> [SessionM] {
         return sessions
     }
 

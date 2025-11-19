@@ -314,7 +314,7 @@ final class PostBookingMentorshipViewController: UIViewController {
     }()
 
     // data
-    private var sessions: [Session] = []
+    private var sessions: [SessionM] = []
     private var calls: [Call] = []
     private var mentors: [Mentor] = [
         Mentor(name: "Nathan Hales", role: "Actor", rating: 4.9, imageName: "Image"),

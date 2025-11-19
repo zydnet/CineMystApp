@@ -68,7 +68,7 @@ final class UpcomingViewController: UIViewController {
     }()
 
     // MARK: - Data
-    private var sessions: [Session] = []
+    private var sessions: [SessionM] = []
 
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -140,7 +140,7 @@ final class UpcomingViewController: UIViewController {
         tableView.setContentOffset(.zero, animated: true)
     }
 
-    private func applySegmentFilter(base all: [Session]) {
+    private func applySegmentFilter(base all: [SessionM]) {
         switch segmented.selectedSegmentIndex {
         case 0: // Upcoming
             let now = Date()

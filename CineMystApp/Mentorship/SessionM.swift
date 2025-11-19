@@ -3,7 +3,7 @@
 
 import Foundation
 
-struct Session: Codable {
+struct SessionM: Codable {
     let id: String
     let mentorId: String
     let mentorName: String

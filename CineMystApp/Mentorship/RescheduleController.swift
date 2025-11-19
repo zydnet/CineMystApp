@@ -10,7 +10,7 @@ import UIKit
 final class RescheduleViewController: UIViewController {
 
     // MARK: Public
-    let session: Session
+    let session: SessionM
     /// called when user confirms reschedule: (newDate, selectedSlot)
     var onReschedule: ((Date, String) -> Void)?
 
@@ -96,7 +96,7 @@ final class RescheduleViewController: UIViewController {
     private var selectedSlot: String?
 
     // MARK: init
-    init(session: Session, onReschedule: ((Date, String) -> Void)? = nil) {
+    init(session: SessionM, onReschedule: ((Date, String) -> Void)? = nil) {
         self.session = session
         self.onReschedule = onReschedule
         super.init(nibName: nil, bundle: nil)

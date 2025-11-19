@@ -187,7 +187,7 @@ final class PaymentConfirmationViewController: UIViewController {
         if scheduledDate == nil { print("[PaymentConfirmation] scheduledDate nil — using now: \(usedDate)") }
 
         // create session including mentor image name (fallback to "Image")
-        let session = Session(
+        let session = SessionM(
             id: UUID().uuidString,
             mentorId: usedMentor.name,
             mentorName: usedMentor.name,
