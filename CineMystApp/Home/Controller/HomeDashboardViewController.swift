@@ -7,8 +7,16 @@
 
 
 
+//
+//  HomeDashboardViewController.swift
+//  CineMystApp
+//
+//  Created by Devanshi on 11/11/25.
+//
+
 import UIKit
 import SwiftUI
+import PhotosUI
 
 final class HomeDashboardViewController: UIViewController {
 
@@ -42,16 +50,13 @@ final class HomeDashboardViewController: UIViewController {
         
         let swiftUIView = FloatingMenuButton(
             didTapStory: { [weak self] in
-                print("📷 → OPEN CAMERA (Add Story)")
-                // Add your story creation logic here
+                self?.openCamera()
             },
             didTapPost: { [weak self] in
-                print("📝 → OPEN CREATE POST screen")
-                // Add your post creation logic here
+                print("📝 Post button tapped (optional screen)")
             },
             didTapGallery: { [weak self] in
-                print("🖼 → OPEN PHOTO PICKER")
-                // Add your gallery picker logic here
+                self?.openGallery()
             }
         )
         
@@ -67,7 +72,7 @@ final class HomeDashboardViewController: UIViewController {
             hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 70),
             hostingController.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: 110),
             hostingController.view.widthAnchor.constraint(equalToConstant: 220),
-            hostingController.view.heightAnchor.constraint(equalToConstant: 220) // Space for arc expansion
+            hostingController.view.heightAnchor.constraint(equalToConstant: 220)
         ])
         
         hostingController.didMove(toParent: self)
@@ -255,5 +260,86 @@ extension HomeDashboardViewController: UITableViewDataSource, UITableViewDelegat
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         indexPath.section == 0 ? 440 : 180
+    }
+}
+
+//
+// MARK: - CAMERA + GALLERY + INSTAGRAM POST FLOW
+//
+extension HomeDashboardViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate, PHPickerViewControllerDelegate {
+
+    // MARK: - CAMERA
+    func openCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
+        
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = self
+        picker.allowsEditing = false
+        
+        present(picker, animated: true)
+    }
+
+    // MARK: - MULTI SELECT GALLERY
+    func openGallery() {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = 0   // Instagram style unlimited
+        config.filter = .images
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = self
+        
+        present(picker, animated: true)
+    }
+
+    // MARK: - PHPicker RESULT
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        
+        var images: [UIImage] = []
+        let group = DispatchGroup()
+        
+        for result in results {
+            group.enter()
+            
+            result.itemProvider.loadObject(ofClass: UIImage.self) { image, _ in
+                if let img = image as? UIImage {
+                    images.append(img)
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            self.openCreatePost(images: images)
+        }
+    }
+
+    // MARK: - CAMERA RESULT
+    func imagePickerController(_ picker: UIImagePickerController,
+                               didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        
+        picker.dismiss(animated: true)
+        
+        if let image = info[.originalImage] as? UIImage {
+            openCreatePost(images: [image])
+        }
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
+    }
+
+    // MARK: - MOVE TO INSTAGRAM-LIKE POST SCREEN
+    func openCreatePost(images: [UIImage]) {
+        let vc = NewPostViewController(images: images)
+        vc.modalPresentationStyle = .fullScreen
+        
+        vc.onPostCompleted = { [weak self] in
+            self?.dismiss(animated: true)
+            self?.tableView.reloadData()
+        }
+        
+        present(vc, animated: true)
     }
 }

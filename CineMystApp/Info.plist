@@ -10,6 +10,8 @@
 	<string>CineMyst needs access to your camera to capture stories and flicks.
 CineMyst needs access to your camera to capture stories and flicks.
 CineMyst needs to access your camera</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CineMyst needs access to your photo library to select and share media</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

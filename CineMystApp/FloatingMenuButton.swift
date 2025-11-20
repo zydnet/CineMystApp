@@ -5,15 +5,8 @@
 //  Created by user@50 on 18/11/25.
 //
 
-
-//
-//  FloatingMenuButton.swift
-//  CineMystApp
-//
-//  Created by user@50 on 18/11/25.
-//
-
 import SwiftUI
+import UIKit
 
 struct FloatingMenuButton: View {
     
@@ -62,17 +55,15 @@ struct FloatingMenuButton: View {
                 Image(systemName: isExpanded ? "xmark" : "plus")
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundColor(isExpanded ? .accentColor : .white)
-
                     .frame(width: 60, height: 60)
                     .background(
                         LinearGradient(
                             colors: isExpanded
-                            ? [Color(.systemGray5)]  // Red circle for X
-                                : [Color.accentColor],  // Purple circle for plus
+                            ? [Color(.systemGray5)]
+                                : [Color.accentColor],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
-                    
                     )
                     .clipShape(Circle())
                     .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
@@ -131,26 +122,26 @@ struct MenuActionButton: View {
 }
 
 // MARK: - UIKit Wrapper
-import UIKit
-
 final class FloatingMenuHostingController: UIViewController {
     
     var didTapStory: (() -> Void)?
     var didTapPost: (() -> Void)?
     var didTapGallery: (() -> Void)?
     
+    private var imagePickerController: UIImagePickerController?
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
         let swiftUIView = FloatingMenuButton(
             didTapStory: { [weak self] in
-                self?.didTapStory?()
+                self?.openCamera()
             },
             didTapPost: { [weak self] in
                 self?.didTapPost?()
             },
             didTapGallery: { [weak self] in
-                self?.didTapGallery?()
+                self?.openGallery()
             }
         )
         
@@ -169,5 +160,75 @@ final class FloatingMenuHostingController: UIViewController {
         ])
         
         hostingController.didMove(toParent: self)
+    }
+    
+    // MARK: - Camera Methods
+    private func openCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            showAlert(message: "Camera is not available on this device")
+            return
+        }
+        
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = self
+        picker.allowsEditing = true
+        picker.mediaTypes = ["public.image", "public.movie"] // Support both photos and videos
+        
+        imagePickerController = picker
+        present(picker, animated: true)
+    }
+    
+    private func openGallery() {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = self
+        picker.allowsEditing = true
+        
+        imagePickerController = picker
+        present(picker, animated: true)
+    }
+    
+    private func showAlert(message: String) {
+        let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+// MARK: - UIImagePickerController Delegate
+extension FloatingMenuHostingController: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        
+        picker.dismiss(animated: true)
+        
+        // Handle the captured/selected media
+        if let image = info[.editedImage] as? UIImage ?? info[.originalImage] as? UIImage {
+            // Handle the image
+            handleCapturedImage(image)
+        } else if let videoURL = info[.mediaURL] as? URL {
+            // Handle the video
+            handleCapturedVideo(videoURL)
+        }
+    }
+    
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
+    }
+    
+    // MARK: - Media Handling
+    private func handleCapturedImage(_ image: UIImage) {
+        // TODO: Process the captured image
+        print("Image captured: \(image.size)")
+        // You can save it, upload it, or pass it to another view controller
+        didTapStory?() // Call the original callback if needed
+    }
+    
+    private func handleCapturedVideo(_ videoURL: URL) {
+        // TODO: Process the captured video
+        print("Video captured: \(videoURL)")
+        // You can save it, upload it, or pass it to another view controller
+        didTapStory?() // Call the original callback if needed
     }
 }
