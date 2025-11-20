@@ -126,16 +126,27 @@ final class PaymentViewController: UIViewController {
 
         // Hide tab bar only
         tabBarController?.tabBar.isHidden = true
-    }
 
+        // If you also have a floating button on your custom TabBarController,
+        // you'll need to hide/show it here as well. Example:
+        // (Assuming your tabBar controller has a `floatingButton` property)
+        //
+        // if let tb = tabBarController as? CineMystTabBarController {
+        //     tb.setFloatingButton(hidden: true)
+        // }
+    }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
 
         // Restore tab bar only
         tabBarController?.tabBar.isHidden = false
-    }
 
+        // Restore floating button if you hid it above:
+        // if let tb = tabBarController as? CineMystTabBarController {
+        //     tb.setFloatingButton(hidden: false)
+        // }
+    }
 
     // MARK: Actions
     private func wireActions() {
@@ -157,6 +168,8 @@ final class PaymentViewController: UIViewController {
         // optional: set onDone if you still want additional behavior
         confirmationVC.onDone = { [weak self] in
             print("[PaymentViewController] confirmation done callback")
+            // Example: pop to root or update UI if needed
+            // self?.navigationController?.popToRootViewController(animated: true)
         }
 
         present(confirmationVC, animated: true, completion: nil)

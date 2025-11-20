@@ -34,35 +34,41 @@ class CineMystTabBarController: UITabBarController, UITabBarControllerDelegate {
         tabBar.unselectedItemTintColor = .systemGray
 
         // MARK: - Tabs
+
+        // Home
         let homeVC = UINavigationController(rootViewController: HomeDashboardViewController())
         homeVC.tabBarItem = UITabBarItem(title: "Home",
                                          image: UIImage(systemName: "house.fill"),
                                          tag: 0)
 
-        let flicksVC = UIViewController()
-        flicksVC.view.backgroundColor = .systemBackground
-        flicksVC.tabBarItem = UITabBarItem(title: "Flicks",
-                                           image: UIImage(systemName: "popcorn.fill"),
-                                           tag: 1)
+        // Flicks → ReelsViewController
+        let reelsVC = ReelsViewController()
+        let flicksNav = UINavigationController(rootViewController: reelsVC)
+        flicksNav.tabBarItem = UITabBarItem(title: "Flicks",
+                                            image: UIImage(systemName: "popcorn.fill"),
+                                            tag: 1)
 
-        let chatVC = UIViewController()
-        chatVC.view.backgroundColor = .systemBackground
-        chatVC.tabBarItem = UITabBarItem(title: "Chat",
-                                         image: UIImage(systemName: "bubble.left.and.bubble.right.fill"),
-                                         tag: 2)
+        // Chat → MessagesViewController
+        let messagesVC = MessagesViewController()
+        let chatNav = UINavigationController(rootViewController: messagesVC)
+        chatNav.tabBarItem = UITabBarItem(title: "Chat",
+                                          image: UIImage(systemName: "bubble.left.and.bubble.right.fill"),
+                                          tag: 2)
 
-        // Mentorship tab
+        // Mentorship
         let mentorHome = MentorshipHomeViewController()
         let mentorVC = UINavigationController(rootViewController: mentorHome)
         mentorVC.tabBarItem = UITabBarItem(title: "Mentorship",
                                            image: UIImage(systemName: "person.2.fill"),
                                            tag: 3)
 
+        // Jobs
         let jobsVC = UINavigationController(rootViewController: jobsViewController())
         jobsVC.tabBarItem = UITabBarItem(title: "Jobs",
                                          image: UIImage(systemName: "briefcase.fill"),
                                          tag: 4)
 
-        viewControllers = [homeVC, flicksVC, chatVC, mentorVC, jobsVC]
+        // Final Tab Order
+        viewControllers = [homeVC, flicksNav, chatNav, mentorVC, jobsVC]
     }
 }

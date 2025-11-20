@@ -1,6 +1,7 @@
 //
 // PaymentConfirmationViewController.swift
 // Creates a Session on Done. Uses mentor.imageName when available (falls back to demo "Image").
+// Updated: dismisses before replacing Mentorship tab and uses robust tab-finding logic.
 //
 
 import UIKit
@@ -200,12 +201,16 @@ final class PaymentConfirmationViewController: UIViewController {
         SessionStore.shared.add(session)
         print("[PaymentConfirmation] created session id=\(session.id) mentor=\(session.mentorName)")
 
-        // Replace Mentorship tab to show post-booking screen
-        replaceMentorshipTabWithPostBookingScreen()
-
-        animateOut {
+        // Animate out, then dismiss this modal, then replace the Mentorship tab.
+        animateOut { [weak self] in
+            guard let self = self else { return }
             self.dismiss(animated: false) {
-                self.onDone?()
+                // Now that the confirmation is dismissed, replace the Mentorship tab
+                DispatchQueue.main.async {
+                    self.replaceMentorshipTabWithPostBookingScreen()
+                    // call onDone after nav replacement so caller can react to navigation
+                    self.onDone?()
+                }
             }
         }
     }
@@ -217,36 +222,47 @@ final class PaymentConfirmationViewController: UIViewController {
         let postBookingVC = PostBookingMentorshipViewController()
         let newNav = UINavigationController(rootViewController: postBookingVC)
 
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first(where: { $0.isKeyWindow }),
-              let tabBar = window.rootViewController as? UITabBarController,
-              let tabs = tabBar.viewControllers else {
+        guard let tabBar = findTabBarController() else {
+            print("[PaymentConfirmation] no UITabBarController found — presenting PostBooking modally")
             DispatchQueue.main.async {
                 let nav = UINavigationController(rootViewController: postBookingVC)
                 nav.modalPresentationStyle = .fullScreen
+                // present on topmost/root
                 UIApplication.shared.windows.first?.rootViewController?.present(nav, animated: true, completion: nil)
             }
             return
         }
 
-        var newTabs = tabs
+        guard var tabs = tabBar.viewControllers else {
+            print("[PaymentConfirmation] tabBar.viewControllers nil — presenting modally")
+            DispatchQueue.main.async {
+                let nav = UINavigationController(rootViewController: postBookingVC)
+                nav.modalPresentationStyle = .fullScreen
+                tabBar.present(nav, animated: true, completion: nil)
+            }
+            return
+        }
+
         var replaced = false
 
+        // 1) Try direct type match (nav root or child)
         for (index, child) in tabs.enumerated() {
             if let nav = child as? UINavigationController, let root = nav.viewControllers.first {
                 if root is MentorshipHomeViewController || String(describing: type(of: root)).lowercased().contains("mentorship") {
+                    print("[PaymentConfirmation] replacing tab at index \(index) (nav root match)")
                     newNav.tabBarItem = nav.tabBarItem
-                    newTabs[index] = newNav
-                    tabBar.setViewControllers(newTabs, animated: false)
+                    tabs[index] = newNav
+                    tabBar.setViewControllers(tabs, animated: false)
                     tabBar.selectedIndex = index
                     replaced = true
                     break
                 }
             } else {
                 if child is MentorshipHomeViewController || String(describing: type(of: child)).lowercased().contains("mentorship") {
+                    print("[PaymentConfirmation] replacing tab at index \(index) (child match)")
                     newNav.tabBarItem = child.tabBarItem
-                    newTabs[index] = newNav
-                    tabBar.setViewControllers(newTabs, animated: false)
+                    tabs[index] = newNav
+                    tabBar.setViewControllers(tabs, animated: false)
                     tabBar.selectedIndex = index
                     replaced = true
                     break
@@ -254,13 +270,16 @@ final class PaymentConfirmationViewController: UIViewController {
             }
         }
 
+        // 2) Try title-based match
         if !replaced {
             for (index, child) in tabs.enumerated() {
                 let title = (child.tabBarItem.title ?? "").lowercased()
+                print("[PaymentConfirmation] checking tab \(index) title: \(title)")
                 if title.contains("mentor") || title.contains("mentorship") {
+                    print("[PaymentConfirmation] replacing tab at index \(index) (title match)")
                     newNav.tabBarItem = child.tabBarItem
-                    newTabs[index] = newNav
-                    tabBar.setViewControllers(newTabs, animated: false)
+                    tabs[index] = newNav
+                    tabBar.setViewControllers(tabs, animated: false)
                     tabBar.selectedIndex = index
                     replaced = true
                     break
@@ -268,15 +287,60 @@ final class PaymentConfirmationViewController: UIViewController {
             }
         }
 
+        // 3) If nothing replaced, append a new Mentorship tab
         if !replaced {
+            print("[PaymentConfirmation] no mentorship tab found — appending new tab")
             newNav.tabBarItem = UITabBarItem(title: "Mentorship", image: UIImage(systemName: "person.2.fill"), tag: 99)
-            newTabs.append(newNav)
-            tabBar.setViewControllers(newTabs, animated: false)
-            tabBar.selectedIndex = newTabs.count - 1
+            tabs.append(newNav)
+            tabBar.setViewControllers(tabs, animated: false)
+            tabBar.selectedIndex = tabs.count - 1
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
             postBookingVC.reloadSessions()
         }
+    }
+
+    // MARK: - Helpers to find UITabBarController robustly
+
+    /// Searches connected scenes/windows/root view controllers recursively to find a UITabBarController.
+    private func findTabBarController() -> UITabBarController? {
+        // Search scenes (iOS 13+)
+        for scene in UIApplication.shared.connectedScenes {
+            guard let ws = scene as? UIWindowScene else { continue }
+            for window in ws.windows {
+                if let t = window.rootViewController as? UITabBarController {
+                    return t
+                }
+                if let found = findTabBarIn(vc: window.rootViewController) {
+                    return found
+                }
+            }
+        }
+        // Fallback to UIApplication windows
+        for window in UIApplication.shared.windows {
+            if let t = window.rootViewController as? UITabBarController {
+                return t
+            }
+            if let found = findTabBarIn(vc: window.rootViewController) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    /// Recursively searches a view controller tree (children + presented) for a UITabBarController.
+    private func findTabBarIn(vc: UIViewController?) -> UITabBarController? {
+        guard let vc = vc else { return nil }
+        if let t = vc as? UITabBarController { return t }
+        // Search children
+        for child in vc.children {
+            if let found = findTabBarIn(vc: child) { return found }
+        }
+        // Search presented chain
+        if let presented = vc.presentedViewController {
+            if let found = findTabBarIn(vc: presented) { return found }
+        }
+        return nil
     }
 }
