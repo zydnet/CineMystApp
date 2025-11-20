@@ -35,6 +35,10 @@
 			exceptions = (
 				5B9C89172EC2D95400A0F1F1 /* Exceptions for "CineMystApp" folder in "CineMystApp" target */,
 			);
+			explicitFileTypes = {
+				me1.mp4 = video.mpeg;
+				me2.mp4 = video.mpeg;
+			};
 			path = CineMystApp;
 			sourceTree = "<group>";
 		};

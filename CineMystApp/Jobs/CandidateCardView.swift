@@ -1,30 +1,34 @@
 import UIKit
+import AVFoundation
+import AVKit
 
 class CandidateCardView: UIView {
 
     private let model: CandidateModel
+    private var player: AVPlayer?
+    private var playerLayer: AVPlayerLayer?
 
     init(model: CandidateModel) {
         self.model = model
         super.init(frame: .zero)
 
         layer.cornerRadius = 20
-        layer.masksToBounds = true   // IMPORTANT → ensures image clips
+        layer.masksToBounds = true
         backgroundColor = .clear
 
         setupUI()
+        setupVideo()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     // MARK: - UI Elements
 
-    private let imageView: UIImageView = {
-        let iv = UIImageView()
-        iv.contentMode = .scaleAspectFill
-        iv.clipsToBounds = true
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        return iv
+    private let videoContainerView: UIView = {
+        let view = UIView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.backgroundColor = .black
+        return view
     }()
 
     // Dark gradient overlay for better text visibility
@@ -83,13 +87,50 @@ class CandidateCardView: UIView {
         return btn
     }()
 
+    // MARK: - Setup Video
+
+    private func setupVideo() {
+        // Get video URL from bundle
+        guard let videoURL = Bundle.main.url(forResource: model.videoName, withExtension: "mp4") else {
+            print("❌ Video not found: \(model.videoName).mp4")
+            return
+        }
+
+        // Create player
+        player = AVPlayer(url: videoURL)
+        
+        // Create player layer
+        playerLayer = AVPlayerLayer(player: player)
+        playerLayer?.videoGravity = .resizeAspectFill
+        playerLayer?.frame = videoContainerView.bounds
+        
+        if let playerLayer = playerLayer {
+            videoContainerView.layer.addSublayer(playerLayer)
+        }
+
+        // Loop video
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem,
+            queue: .main
+        ) { [weak self] _ in
+            self?.player?.seek(to: .zero)
+            self?.player?.play()
+        }
+
+        // Start playing
+        player?.play()
+        
+        // Mute by default (optional)
+        player?.isMuted = true
+    }
+
     // MARK: - Setup UI
 
     private func setupUI() {
 
-        // FULL SCREEN IMAGE
-        addSubview(imageView)
-        imageView.image = UIImage(named: model.imageName)
+        // VIDEO CONTAINER
+        addSubview(videoContainerView)
 
         // GRADIENT
         gradientLayer.colors = [
@@ -99,7 +140,7 @@ class CandidateCardView: UIView {
         gradientLayer.locations = [0.4, 1.0]
         layer.addSublayer(gradientLayer)
 
-        // TEXT OVER IMAGE
+        // TEXT OVER VIDEO
         addSubview(nameLabel)
         addSubview(verifyIcon)
         addSubview(locationLabel)
@@ -115,11 +156,11 @@ class CandidateCardView: UIView {
 
         NSLayoutConstraint.activate([
 
-            // IMAGE → FILL ENTIRE CARD
-            imageView.topAnchor.constraint(equalTo: topAnchor),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // VIDEO CONTAINER → FILL ENTIRE CARD
+            videoContainerView.topAnchor.constraint(equalTo: topAnchor),
+            videoContainerView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            videoContainerView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            videoContainerView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
             nameLabel.bottomAnchor.constraint(equalTo: locationLabel.topAnchor, constant: -6),
@@ -149,7 +190,24 @@ class CandidateCardView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        gradientLayer.frame = bounds   // ensures gradient covers entire image
+        gradientLayer.frame = bounds
+        playerLayer?.frame = videoContainerView.bounds
+    }
+
+    // MARK: - Video Control
+
+    func playVideo() {
+        player?.play()
+    }
+
+    func pauseVideo() {
+        player?.pause()
+    }
+
+    // Clean up when card is removed
+    deinit {
+        player?.pause()
+        player = nil
+        NotificationCenter.default.removeObserver(self)
     }
 }
-

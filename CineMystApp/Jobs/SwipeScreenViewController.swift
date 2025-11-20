@@ -271,7 +271,7 @@ class SwipeScreenViewController: UIViewController {
 
         card.frame = CGRect(
             x: (view.bounds.width - cardWidth) / 2 + inset,
-            y: 180 + inset,
+            y: 220 + inset,
             width: cardWidth,
             height: cardHeight
         )
@@ -375,4 +375,3 @@ class SwipeScreenViewController: UIViewController {
         navigationController?.pushViewController(vc, animated: true)
     }
 }
-
