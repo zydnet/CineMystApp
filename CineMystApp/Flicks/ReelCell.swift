@@ -3,6 +3,7 @@
 //  CineMystApp
 //
 //  Updated to match Instagram Reels design
+//  Second pass: fixed bottom alignment and safe-area issues
 //
 
 import UIKit
@@ -25,10 +26,17 @@ final class ReelCell: UICollectionViewCell {
     private var isLiked = false
     
     // Video player
-    private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var playerLooper: AVPlayerLooper?
     private var queuePlayer: AVQueuePlayer?
+    
+    // Small layout tune constants
+    private enum Layout {
+        static let rightStackBottom: CGFloat = -130   // move icons up from safe area
+        static let bottomInfoBottom: CGFloat = -96    // bottom-left info baseline above tab bar
+        static let musicDiscBottom: CGFloat = -20
+        static let horizontalMargin: CGFloat = 12
+    }
     
     // UI Elements
     private let playIconView: UIImageView = {
@@ -219,7 +227,7 @@ final class ReelCell: UICollectionViewCell {
     }
     
     required init?(coder: NSCoder) {
-        fatalError()
+        fatalError("init(coder:) has not been implemented")
     }
     
     override func layoutSubviews() {
@@ -269,6 +277,12 @@ final class ReelCell: UICollectionViewCell {
     }
     
     private func setupConstraints() {
+        // ensure autoresizing masks are off
+        [playIconView, topBar, snapsLabel, dropdownIcon, shareIcon, actionStack, musicDiscView,
+         bottomInfoContainer, avatarImageView, nameLabel, connectButton, captionLabel, likedByLabel,
+         audioContainer, audioIcon, audioLabel, giftIcon, sendGiftLabel, musicThumb]
+            .forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+        
         NSLayoutConstraint.activate([
             // Play icon
             playIconView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
@@ -295,20 +309,20 @@ final class ReelCell: UICollectionViewCell {
             shareIcon.widthAnchor.constraint(equalToConstant: 24),
             shareIcon.heightAnchor.constraint(equalToConstant: 24),
             
-            // Action stack
-            actionStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            actionStack.bottomAnchor.constraint(equalTo: audioContainer.centerYAnchor, constant: -20),
+            // Action stack pinned to bottom-right (raised above tab bar by a fixed amount)
+            actionStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Layout.horizontalMargin),
+            actionStack.bottomAnchor.constraint(equalTo: contentView.safeAreaLayoutGuide.bottomAnchor, constant: Layout.rightStackBottom),
             
             // Music disc
-            musicDiscView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            musicDiscView.topAnchor.constraint(equalTo: actionStack.bottomAnchor, constant: 24),
+            musicDiscView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Layout.horizontalMargin),
+            musicDiscView.bottomAnchor.constraint(equalTo: contentView.safeAreaLayoutGuide.bottomAnchor, constant: Layout.musicDiscBottom),
             musicDiscView.widthAnchor.constraint(equalToConstant: 40),
             musicDiscView.heightAnchor.constraint(equalToConstant: 40),
             
-            // Bottom info container
-            bottomInfoContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
+            // Bottom info container pinned to bottom-left and raised above the tab bar
+            bottomInfoContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Layout.horizontalMargin),
             bottomInfoContainer.trailingAnchor.constraint(equalTo: actionStack.leadingAnchor, constant: -12),
-            bottomInfoContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -200),
+            bottomInfoContainer.bottomAnchor.constraint(equalTo: contentView.safeAreaLayoutGuide.bottomAnchor, constant: Layout.bottomInfoBottom),
             
             // Avatar & name
             avatarImageView.leadingAnchor.constraint(equalTo: bottomInfoContainer.leadingAnchor),
@@ -319,9 +333,11 @@ final class ReelCell: UICollectionViewCell {
             nameLabel.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 8),
             nameLabel.centerYAnchor.constraint(equalTo: avatarImageView.centerYAnchor),
             
+            // connect button should not push out of container: allow it to compress if needed
             connectButton.leadingAnchor.constraint(equalTo: nameLabel.trailingAnchor, constant: 8),
             connectButton.centerYAnchor.constraint(equalTo: avatarImageView.centerYAnchor),
             connectButton.heightAnchor.constraint(equalToConstant: 26),
+            connectButton.trailingAnchor.constraint(lessThanOrEqualTo: bottomInfoContainer.trailingAnchor),
             
             // Caption
             captionLabel.leadingAnchor.constraint(equalTo: bottomInfoContainer.leadingAnchor),
@@ -367,6 +383,10 @@ final class ReelCell: UICollectionViewCell {
             musicThumb.widthAnchor.constraint(equalToConstant: 28),
             musicThumb.heightAnchor.constraint(equalToConstant: 28)
         ])
+        
+        // prevent "Connect" from growing past the available space
+        connectButton.setContentCompressionResistancePriority(.required, for: .vertical)
+        connectButton.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     }
     
     private func setupTapGesture() {
@@ -425,7 +445,10 @@ final class ReelCell: UICollectionViewCell {
         // Create attributed string for "Liked by" label
         let likedText = "Liked by your friend and 25,513 others"
         let attributedString = NSMutableAttributedString(string: likedText)
-        attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 12, weight: .semibold), range: NSRange(location: 9, length: 11)) // "your friend"
+        if let range = likedText.range(of: "your friend") {
+            let nsRange = NSRange(range, in: likedText)
+            attributedString.addAttribute(.font, value: UIFont.systemFont(ofSize: 12, weight: .semibold), range: nsRange)
+        }
         likedByLabel.attributedText = attributedString
         
         if let likeLabel = likeButton.arrangedSubviews.last as? UILabel {
