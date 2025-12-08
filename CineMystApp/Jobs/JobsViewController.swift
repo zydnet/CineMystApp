@@ -284,7 +284,7 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     private func addJobCards() {
         let jobs = [
             ("Lead Actor - Drama Series City of Dreams", "YRF Casting", "Mumbai, India", "₹ 5k/day", "2 days left", "Web Series"),
-            ("Assistant Director - Feature Film", "Red Chillies Entertainment", "Delhi, India", "₹ 8k/day", "5 days left", "Feature Film"),
+            ("Assistant Director- Feature Film", "Red Chillies Entertainment", "Delhi, India", "₹ 8k/day", "5 days left", "Feature Film"),
             ("Background Dancer", "T-Series", "Pune, India", "₹ 3k/day", "1 day left", "Music Video"),
             ("Camera Operator", "Balaji Motion Pictures", "Hyderabad, India", "₹ 6k/day", "3 days left", "Web Series")
         ]

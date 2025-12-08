@@ -25,7 +25,7 @@ class JobDetailsViewController: UIViewController {
         return btn
    }()
     @objc private func applyTapped() {
-        let vc = TaskDetailsViewController()
+        let vc = ApplicationStartedViewController()
         navigationController?.pushViewController(vc, animated: true)
     }
 

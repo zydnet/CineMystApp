@@ -1,5 +1,5 @@
 import UIKit
-//main first job screen 
+//main first job screen
 class JobCardView: UIView {
     
     private let profileImageView = UIImageView()
@@ -84,7 +84,7 @@ class JobCardView: UIView {
         profileImageView.translatesAutoresizingMaskIntoConstraints = false
         
         // Title
-        titleLabel.font = UIFont.boldSystemFont(ofSize: 17)
+        titleLabel.font = UIFont.boldSystemFont(ofSize: 16)
         titleLabel.numberOfLines = 2
         
         // Company label (simple text, no rounded tag box)
@@ -185,10 +185,10 @@ class JobCardView: UIView {
             mainStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             mainStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
             
-            bookmarkButton.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            bookmarkButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            bookmarkButton.widthAnchor.constraint(equalToConstant: 24),
-            bookmarkButton.heightAnchor.constraint(equalToConstant: 24)
+            bookmarkButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            bookmarkButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            bookmarkButton.widthAnchor.constraint(equalToConstant: 22),
+            bookmarkButton.heightAnchor.constraint(equalToConstant: 22)
         ])
     }
 
@@ -208,4 +208,3 @@ class JobCardView: UIView {
     }
 
 }
-

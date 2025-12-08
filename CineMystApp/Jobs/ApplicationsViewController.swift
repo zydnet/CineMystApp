@@ -108,7 +108,7 @@ class ApplicationsViewController: UIViewController {
         let btn = UIButton()
         btn.setTitle("Filtered by AI", for: .normal)
         btn.setTitleColor(.white, for: .normal)
-        btn.backgroundColor = UIColor(red: 0.4, green: 0.1, blue: 0.4, alpha: 1.0)
+        btn.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1.0)
         btn.layer.cornerRadius = 19
         btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .medium)
         btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 16)

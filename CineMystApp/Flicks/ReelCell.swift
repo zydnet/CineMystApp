@@ -4,6 +4,9 @@
 //
 //  Updated to match Instagram Reels design
 //  Second pass: fixed bottom alignment and safe-area issues
+//  Third pass: removed the top-right share icon that overlapped the "Snaps" title
+//  Fourth pass: wired the "more" (ellipsis) button to notify the delegate so the
+//  containing view controller can present an action sheet with Save / Interested / Not Interested / Report
 //
 
 import UIKit
@@ -13,6 +16,9 @@ import AVFoundation
 protocol ReelCellDelegate: AnyObject {
     func didTapComment(on cell: ReelCell)
     func didTapShare(on cell: ReelCell)
+    /// Called when the user taps the "more" (ellipsis) button. The sourceView can be used
+    /// by the presenter for popover anchoring on iPad.
+    func didTapMore(on cell: ReelCell, sourceView: UIView)
 }
 
 final class ReelCell: UICollectionViewCell {
@@ -69,15 +75,6 @@ final class ReelCell: UICollectionViewCell {
     private let dropdownIcon: UIImageView = {
         let iv = UIImageView()
         iv.image = UIImage(systemName: "chevron.down")
-        iv.tintColor = .white
-        iv.contentMode = .scaleAspectFit
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        return iv
-    }()
-    
-    private let shareIcon: UIImageView = {
-        let iv = UIImageView()
-        iv.image = UIImage(systemName: "paperplane")
         iv.tintColor = .white
         iv.contentMode = .scaleAspectFit
         iv.translatesAutoresizingMaskIntoConstraints = false
@@ -246,7 +243,7 @@ final class ReelCell: UICollectionViewCell {
         contentView.addSubview(topBar)
         topBar.addSubview(snapsLabel)
         topBar.addSubview(dropdownIcon)
-        topBar.addSubview(shareIcon)
+        // NOTE: removed the top-right share icon to prevent overlap with other UI elements
         
         // Action stack
         contentView.addSubview(actionStack)
@@ -278,7 +275,7 @@ final class ReelCell: UICollectionViewCell {
     
     private func setupConstraints() {
         // ensure autoresizing masks are off
-        [playIconView, topBar, snapsLabel, dropdownIcon, shareIcon, actionStack, musicDiscView,
+        [playIconView, topBar, snapsLabel, dropdownIcon, actionStack, musicDiscView,
          bottomInfoContainer, avatarImageView, nameLabel, connectButton, captionLabel, likedByLabel,
          audioContainer, audioIcon, audioLabel, giftIcon, sendGiftLabel, musicThumb]
             .forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
@@ -303,11 +300,6 @@ final class ReelCell: UICollectionViewCell {
             dropdownIcon.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
             dropdownIcon.widthAnchor.constraint(equalToConstant: 16),
             dropdownIcon.heightAnchor.constraint(equalToConstant: 16),
-            
-            shareIcon.trailingAnchor.constraint(equalTo: topBar.trailingAnchor),
-            shareIcon.centerYAnchor.constraint(equalTo: topBar.centerYAnchor),
-            shareIcon.widthAnchor.constraint(equalToConstant: 24),
-            shareIcon.heightAnchor.constraint(equalToConstant: 24),
             
             // Action stack pinned to bottom-right (raised above tab bar by a fixed amount)
             actionStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Layout.horizontalMargin),
@@ -403,6 +395,10 @@ final class ReelCell: UICollectionViewCell {
         if let shareBtn = shareButton.arrangedSubviews.first as? UIButton {
             shareBtn.addTarget(self, action: #selector(handleShare), for: .touchUpInside)
         }
+        // Wire the more (ellipsis) button to notify delegate so the VC can present an action sheet
+        if let moreBtn = moreButton.arrangedSubviews.first as? UIButton {
+            moreBtn.addTarget(self, action: #selector(handleMore(_:)), for: .touchUpInside)
+        }
     }
     
     @objc private func handleTap() {
@@ -431,6 +427,12 @@ final class ReelCell: UICollectionViewCell {
     
     @objc private func handleShare() {
         delegate?.didTapShare(on: self)
+    }
+    
+    @objc private func handleMore(_ sender: UIButton) {
+        // Forward to delegate. The delegate (usually the view controller) should present
+        // a UIAlertController.actionSheet anchored to `sender` for iPad compatibility.
+        delegate?.didTapMore(on: self, sourceView: sender)
     }
     
     // MARK: - Configuration
@@ -550,3 +552,4 @@ final class ReelCell: UICollectionViewCell {
         return sv
     }
 }
+

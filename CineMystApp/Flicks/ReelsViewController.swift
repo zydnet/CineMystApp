@@ -209,11 +209,44 @@ extension ReelsViewController: UICollectionViewDelegate, UICollectionViewDelegat
 
 // MARK: - ReelCell Delegate
 extension ReelsViewController: ReelCellDelegate {
+
     func didTapComment(on cell: ReelCell) {
-        showCommentSheet()
+        // your existing code
     }
-    
+
     func didTapShare(on cell: ReelCell) {
-        showShareSheet()
+        // your existing code
+    }
+
+    func didTapMore(on cell: ReelCell, sourceView: UIView) {
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+
+        sheet.addAction(UIAlertAction(title: "Save", style: .default, handler: { _ in
+            print("Save tapped")
+        }))
+
+        sheet.addAction(UIAlertAction(title: "Interested", style: .default, handler: { _ in
+            print("Interested tapped")
+        }))
+
+        sheet.addAction(UIAlertAction(title: "Not Interested", style: .default, handler: { _ in
+            print("Not Interested tapped")
+        }))
+
+        sheet.addAction(UIAlertAction(title: "Report", style: .destructive, handler: { _ in
+            print("Report tapped")
+        }))
+
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+        // iPad popover support
+        if let pop = sheet.popoverPresentationController {
+            pop.sourceView = sourceView
+            pop.sourceRect = sourceView.bounds
+        }
+
+        present(sheet, animated: true)
     }
 }
+
+  

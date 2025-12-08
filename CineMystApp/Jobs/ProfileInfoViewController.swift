@@ -21,7 +21,13 @@ class ProfileInfoViewController: UIViewController {
     private var selectedExperience: String?
     private var selectedContract: String?
     private var selectedBudget: String?
+    private var selectedAdditionalLocation: String?
+    
+    // Multi-select sets for pills
+    private var selectedSpecializations = Set<String>()
+    private var selectedUnions = Set<String>()
 
+    // MARK: - Helpers (UI builders)
     private func sectionHeader(_ text: String) -> UILabel {
         let label = UILabel()
         label.text = text.uppercased()
@@ -62,6 +68,7 @@ class ProfileInfoViewController: UIViewController {
         return container
     }
 
+    // Each selection cell's value label will have tag = 1000 + containerTag
     private func selectionCell(title: String, value: String, tag: Int) -> UIView {
         let container = UIView()
         container.backgroundColor = UIColor.systemGray6
@@ -78,7 +85,8 @@ class ProfileInfoViewController: UIViewController {
         valueLabel.text = value
         valueLabel.font = UIFont.systemFont(ofSize: 14)
         valueLabel.textColor = .gray
-        valueLabel.tag = 100 // Tag to identify value label
+        // unique predictable tag for value label
+        valueLabel.tag = 1000 + tag
 
         let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
         chevron.tintColor = .gray
@@ -104,6 +112,7 @@ class ProfileInfoViewController: UIViewController {
         return container
     }
 
+    // MARK: - Actions for selection cells
     @objc private func selectionCellTapped(_ sender: UITapGestureRecognizer) {
         guard let tag = sender.view?.tag else { return }
         
@@ -123,6 +132,20 @@ class ProfileInfoViewController: UIViewController {
         case 4:
             title = "Budget Range"
             options = budgetRanges
+        case 5:
+            // Additional Locations: show a text entry alert (freeform input)
+            let alert = UIAlertController(title: "Additional Location", message: "Enter location (city, area, etc.)", preferredStyle: .alert)
+            alert.addTextField { tf in
+                tf.placeholder = "e.g. Mumbai"
+            }
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Add", style: .default, handler: { [weak self] _ in
+                guard let text = alert.textFields?.first?.text,
+                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                self?.updateSelection(tag: tag, value: text)
+            }))
+            present(alert, animated: true)
+            return
         default:
             return
         }
@@ -145,14 +168,27 @@ class ProfileInfoViewController: UIViewController {
     }
 
     private func updateSelection(tag: Int, value: String) {
-        // Find the container view and update its value label
-        guard let container = view.viewWithTag(tag),
-              let valueLabel = container.subviews.first?.subviews.compactMap({ $0 as? UIStackView }).first?.arrangedSubviews.compactMap({ $0 as? UILabel }).first(where: { $0.tag == 100 }) else {
-            return
+        // The value label was assigned tag = 1000 + containerTag
+        let valueTag = 1000 + tag
+        if let valueLabel = view.viewWithTag(valueTag) as? UILabel {
+            valueLabel.text = value
+            valueLabel.textColor = .darkGray
+        } else {
+            // fallback: try container traversal (shouldn't normally be needed)
+            if let container = view.viewWithTag(tag) {
+                for sub in container.subviews {
+                    if let stack = sub as? UIStackView {
+                        for arranged in stack.arrangedSubviews {
+                            if let lbl = arranged as? UILabel, lbl.tag == valueTag {
+                                lbl.text = value
+                                lbl.textColor = .darkGray
+                                break
+                            }
+                        }
+                    }
+                }
+            }
         }
-        
-        valueLabel.text = value
-        valueLabel.textColor = .darkGray
         
         // Store the selected value
         switch tag {
@@ -160,10 +196,12 @@ class ProfileInfoViewController: UIViewController {
         case 2: selectedExperience = value
         case 3: selectedContract = value
         case 4: selectedBudget = value
+        case 5: selectedAdditionalLocation = value
         default: break
         }
     }
 
+    // MARK: - Verification card + action buttons
     private let verificationCard: UIView = {
         let card = UIView()
         card.backgroundColor = UIColor.systemGray6
@@ -232,6 +270,7 @@ class ProfileInfoViewController: UIViewController {
         return b
     }()
 
+    // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
@@ -248,43 +287,33 @@ class ProfileInfoViewController: UIViewController {
         nextButton.addTarget(self, action: #selector(nextTapped), for: .touchUpInside)
     }
     override func viewWillAppear(_ animated: Bool) {
-            super.viewWillAppear(animated)
+        super.viewWillAppear(animated)
 
-            // Hide tab bar only
-            tabBarController?.tabBar.isHidden = true
-
-            // If you also have a floating button on your custom TabBarController,
-            // you'll need to hide/show it here as well. Example:
-            // (Assuming your tabBar controller has a `floatingButton` property)
-            //
-            // if let tb = tabBarController as? CineMystTabBarController {
-            //     tb.setFloatingButton(hidden: true)
-            // }
-        }
+        // Hide tab bar only
+        tabBarController?.tabBar.isHidden = true
+    }
     override func viewWillDisappear(_ animated: Bool) {
-            super.viewWillDisappear(animated)
+        super.viewWillDisappear(animated)
 
-            // Restore tab bar only
-            tabBarController?.tabBar.isHidden = false
-
-            // Restore floating button if you hid it above:
-            // if let tb = tabBarController as? CineMystTabBarController {
-            //     tb.setFloatingButton(hidden: false)
-            // }
-        }
+        // Restore tab bar only
+        tabBarController?.tabBar.isHidden = false
+    }
 
     @objc private func nextTapped() {
         let vc = PostJobViewController()
         navigationController?.pushViewController(vc, animated: true)
     }
 
-    func makeHorizontalTagRow(_ tags: [String]) -> UIView {
+    // MARK: - Pills (specializations / unions)
+    /// Create a horizontally-scrolling row of pill buttons. When tapped they toggle their selected state,
+    /// change background/text color, and update the corresponding selected set on the view controller.
+    private func makeHorizontalTagRow(_ tags: [String], isSpecialization: Bool) -> UIView {
         let scroll = UIScrollView()
         scroll.showsHorizontalScrollIndicator = false
 
         let stack = UIStackView()
         stack.axis = .horizontal
-        stack.spacing = 16
+        stack.spacing = 12
         stack.alignment = .center
 
         scroll.addSubview(stack)
@@ -298,17 +327,31 @@ class ProfileInfoViewController: UIViewController {
             stack.heightAnchor.constraint(equalTo: scroll.heightAnchor)
         ])
 
-        tags.forEach { text in
-            let pill = UILabel()
-            pill.text = "  \(text)     "
-            pill.font = UIFont.systemFont(ofSize: 12)
-            pill.textAlignment = .center
-            pill.backgroundColor = UIColor(white: 0.92, alpha: 1.0)
-            pill.textColor = .black
+        for text in tags {
+            let pill = UIButton(type: .system)
+            pill.setTitle("  \(text)  ", for: .normal)
+            pill.titleLabel?.font = UIFont.systemFont(ofSize: 12)
+            pill.setTitleColor(.black, for: .normal)
+            pill.backgroundColor = UIColor(white: 0.92, alpha: 1)
             pill.layer.cornerRadius = 18
             pill.clipsToBounds = true
-
             pill.heightAnchor.constraint(equalToConstant: 36).isActive = true
+
+            // Use accessibilityIdentifier to mark which set to update
+            pill.accessibilityIdentifier = isSpecialization ? "spec" : "union"
+            // store the text in accessibilityLabel so we can read it in the selector
+            pill.accessibilityLabel = text
+
+            pill.addTarget(self, action: #selector(pillTapped(_:)), for: .touchUpInside)
+
+            // if it's already selected in our sets, mark visually
+            if isSpecialization && selectedSpecializations.contains(text) {
+                pill.backgroundColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1)
+                pill.setTitleColor(.white, for: .normal)
+            } else if !isSpecialization && selectedUnions.contains(text) {
+                pill.backgroundColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1)
+                pill.setTitleColor(.white, for: .normal)
+            }
 
             stack.addArrangedSubview(pill)
         }
@@ -317,6 +360,35 @@ class ProfileInfoViewController: UIViewController {
         return scroll
     }
 
+    @objc private func pillTapped(_ sender: UIButton) {
+        guard let text = sender.accessibilityLabel else { return }
+        let isSpec = (sender.accessibilityIdentifier == "spec")
+        if isSpec {
+            if selectedSpecializations.contains(text) {
+                // deselect
+                selectedSpecializations.remove(text)
+                sender.backgroundColor = UIColor(white: 0.92, alpha: 1)
+                sender.setTitleColor(.black, for: .normal)
+            } else {
+                selectedSpecializations.insert(text)
+                sender.backgroundColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1)
+                sender.setTitleColor(.white, for: .normal)
+            }
+        } else {
+            if selectedUnions.contains(text) {
+                selectedUnions.remove(text)
+                sender.backgroundColor = UIColor(white: 0.92, alpha: 1)
+                sender.setTitleColor(.black, for: .normal)
+            } else {
+                selectedUnions.insert(text)
+                sender.backgroundColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1)
+                sender.setTitleColor(.white, for: .normal)
+            }
+        }
+        // If you need to persist selection immediately, call your save/update API here.
+    }
+
+    // MARK: - Layout / Scroll
     private func setupScroll() {
         view.addSubview(scrollView)
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -362,7 +434,7 @@ class ProfileInfoViewController: UIViewController {
 
         stack.addArrangedSubview(sectionHeader("Location and Reach"))
         stack.addArrangedSubview(inputField(title: "Primary Location *", placeholder: "Your production company name"))
-        stack.addArrangedSubview(selectionCell(title: "Additional Locations", value: "Select company", tag: 5))
+        stack.addArrangedSubview(selectionCell(title: "Additional Locations", value: "Add location", tag: 5))
 
         stack.addArrangedSubview(sectionHeader("Professional Expertise"))
 
@@ -371,7 +443,8 @@ class ProfileInfoViewController: UIViewController {
         specLabel.font = UIFont.boldSystemFont(ofSize: 18)
         stack.addArrangedSubview(specLabel)
 
-        let specRow = makeHorizontalTagRow(["Feature Films", "TV Series", "Commercials", "Documentary"])
+        // Specializations pills (selectable)
+        let specRow = makeHorizontalTagRow(["Feature Films", "TV Series", "Commercials", "Documentary"], isSpecialization: true)
         stack.addArrangedSubview(specRow)
 
         let unionLabel = UILabel()
@@ -379,7 +452,8 @@ class ProfileInfoViewController: UIViewController {
         unionLabel.font = UIFont.boldSystemFont(ofSize: 14)
         stack.addArrangedSubview(unionLabel)
 
-        let unionRow = makeHorizontalTagRow(["DGA", "PGA", "CSA", "IATSE", "WGA"])
+        // Unions pills (selectable)
+        let unionRow = makeHorizontalTagRow(["DGA", "PGA", "CSA", "IATSE", "WGA"], isSpecialization: false)
         stack.addArrangedSubview(unionRow)
 
         stack.addArrangedSubview(sectionHeader("Professional Links"))
@@ -442,7 +516,7 @@ class BottomPickerViewController: UIViewController, UITableViewDelegate, UITable
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+        
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
@@ -555,6 +629,4 @@ extension UITextField {
         leftView = padding
         leftViewMode = .always
     }
-    
-
 }
