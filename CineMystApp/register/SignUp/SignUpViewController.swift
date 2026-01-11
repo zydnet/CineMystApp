@@ -18,8 +18,6 @@ class SignUpViewController: UIViewController {
     @IBOutlet weak var signInButton: UIButton!
     
     private var activityIndicator: UIActivityIndicatorView!
-    
-    // MARK: - Gradient Layer
     private var gradientLayer: CAGradientLayer?
     
     // MARK: - Lifecycle
@@ -40,15 +38,14 @@ class SignUpViewController: UIViewController {
         let gradient = CAGradientLayer()
         
         gradient.colors = [
-            UIColor(red: 54/255, green: 18/255, blue: 52/255, alpha: 1).cgColor, // top
-            UIColor(red: 22/255, green: 8/255, blue: 35/255, alpha: 1).cgColor   // bottom
+            UIColor(red: 54/255, green: 18/255, blue: 52/255, alpha: 1).cgColor,
+            UIColor(red: 22/255, green: 8/255, blue: 35/255, alpha: 1).cgColor
         ]
         
         gradient.startPoint = CGPoint(x: 0, y: 0)
         gradient.endPoint = CGPoint(x: 1, y: 1)
         gradient.frame = view.bounds
         
-        // Remove old gradient if present
         view.layer.sublayers?
             .filter { $0 is CAGradientLayer }
             .forEach { $0.removeFromSuperlayer() }
@@ -65,6 +62,7 @@ class SignUpViewController: UIViewController {
     private func setupUI() {
         passwordTextField.isSecureTextEntry = true
         emailTextField.autocapitalizationType = .none
+        usernameTextField.autocapitalizationType = .none
         
         let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
         view.addGestureRecognizer(tap)
@@ -84,8 +82,8 @@ class SignUpViewController: UIViewController {
     
     // MARK: - Actions
     @IBAction func signUpButtonTapped(_ sender: Any) {
-        guard let username = usernameTextField.text, !username.isEmpty,
-              let fullName = fullNameTextField.text, !fullName.isEmpty,
+        guard let username = usernameTextField.text?.trimmingCharacters(in: .whitespaces), !username.isEmpty,
+              let fullName = fullNameTextField.text?.trimmingCharacters(in: .whitespaces), !fullName.isEmpty,
               let email = emailTextField.text?.trimmingCharacters(in: .whitespaces), !email.isEmpty,
               let password = passwordTextField.text, !password.isEmpty else {
             showAlert(message: "Please fill all fields")
@@ -96,8 +94,12 @@ class SignUpViewController: UIViewController {
             showAlert(message: "Enter a valid email")
             return
         }
+        
+        guard password.count >= 6 else {
+            showAlert(message: "Password must be at least 6 characters")
+            return
+        }
 
-        // Call the actual implemented method
         performSignUp(username: username, fullName: fullName, email: email, password: password)
     }
     
@@ -105,7 +107,7 @@ class SignUpViewController: UIViewController {
         navigationController?.popViewController(animated: true)
     }
     
-    // MARK: - Sign Up (updated with onboarding flow)
+    // MARK: - Sign Up
     private func performSignUp(username: String, fullName: String, email: String, password: String) {
         showLoading(true)
 
@@ -123,17 +125,12 @@ class SignUpViewController: UIViewController {
                 await MainActor.run {
                     showLoading(false)
                     
-                    // Check if email confirmation is required
-                    // If your Supabase project requires email confirmation, show alert
-                    // Otherwise, navigate directly to onboarding
-                    
                     if self.requiresEmailConfirmation() {
                         self.showAlert(
                             title: "Account Created",
                             message: "Please check your email to verify your account, then sign in to continue."
                         )
                     } else {
-                        // Navigate directly to onboarding flow
                         self.navigateToOnboarding(username: username, fullName: fullName)
                     }
                 }
@@ -141,7 +138,13 @@ class SignUpViewController: UIViewController {
             } catch {
                 await MainActor.run {
                     showLoading(false)
-                    showAlert(message: error.localizedDescription)
+                    
+                    var errorMessage = error.localizedDescription
+                    if errorMessage.contains("already registered") {
+                        errorMessage = "This email is already registered. Please sign in instead."
+                    }
+                    
+                    showAlert(message: errorMessage)
                 }
             }
         }
@@ -149,29 +152,22 @@ class SignUpViewController: UIViewController {
     
     // MARK: - Navigation to Onboarding
     private func navigateToOnboarding(username: String, fullName: String) {
-        // Create onboarding coordinator
         let coordinator = OnboardingCoordinator()
         
-        // Pre-fill username and full name if you want to store them
-        // You can extend ProfileData to include these fields
+        // Store username and full name
+        coordinator.profileData.username = username
+        coordinator.profileData.fullName = fullName
         
-        // Create first onboarding screen (Birthday)
         let birthdayVC = BirthdayViewController()
         birthdayVC.coordinator = coordinator
         
-        // Navigate to birthday screen
         navigationController?.pushViewController(birthdayVC, animated: true)
     }
     
     // MARK: - Email Confirmation Check
     private func requiresEmailConfirmation() -> Bool {
-        // Check your Supabase project settings
-        // If you have email confirmation enabled, return true
-        // Otherwise return false to go directly to onboarding
-        
-        // For now, let's assume you DON'T require email confirmation
-        // Change this to true if your Supabase has email confirmation enabled
-        return true
+        // Set to true if your Supabase has email confirmation enabled
+        return false // Change to true in production
     }
 
     // MARK: - Helpers

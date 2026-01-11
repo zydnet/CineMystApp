@@ -5,9 +5,9 @@
 //  Created by user@50 on 08/01/26.
 //
 
-// OnboardingCoordinator.swift
 import SwiftUI
 
+// MARK: - Onboarding Coordinator
 class OnboardingCoordinator: ObservableObject {
     @Published var currentStep: OnboardingStep = .birthday
     @Published var profileData = ProfileData()
@@ -36,19 +36,25 @@ class OnboardingCoordinator: ObservableObject {
     }
 }
 
+// MARK: - Profile Data Model
 struct ProfileData {
+    // User identity (from signup)
+    var username: String?
+    var fullName: String?
+    
+    // Basic information
     var dateOfBirth: Date?
     var role: UserRole?
     var employmentStatus: String?
     
-    // Artist fields
+    // Artist-specific fields
     var primaryRoles: Set<String> = []
     var careerStage: String?
     var skills: [String] = []
     var experienceYears: String?
     var travelWilling: Bool = false
     
-    // Casting Professional fields
+    // Casting Professional-specific fields
     var specificRole: String?
     var companyName: String?
     var castingTypes: Set<String> = []
@@ -64,7 +70,21 @@ struct ProfileData {
     var profilePicture: UIImage?
 }
 
+// MARK: - User Role Enum
 enum UserRole: String, CaseIterable {
     case artist = "Artist"
     case castingProfessional = "Casting Professional"
+    
+    var displayName: String {
+        return self.rawValue
+    }
+    
+    var icon: String {
+        switch self {
+        case .artist:
+            return "theatermasks.fill"
+        case .castingProfessional:
+            return "film.fill"
+        }
+    }
 }

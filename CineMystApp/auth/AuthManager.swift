@@ -77,7 +77,6 @@ final class AuthManager {
     
     // MARK: - Profile Picture Upload
     func uploadProfilePicture(_ image: UIImage, userId: UUID) async throws -> String {
-        // Verify we have a valid session first
         guard let session = try await currentSession() else {
             print("❌ No valid session when uploading profile picture")
             throw ProfileError.invalidSession
@@ -92,7 +91,6 @@ final class AuthManager {
         
         print("📸 Image compressed, size: \(imageData.count) bytes")
         
-        // File path MUST be: userId/filename.jpg to match policy
         let fileName = "\(userId.uuidString)/profile.jpg"
         print("📁 Uploading to path: \(fileName)")
         
@@ -141,8 +139,9 @@ final class AuthManager {
         }
         
         let userId = session.user.id
+        let userEmail = session.user.email ?? ""
         print("👤 User ID: \(userId)")
-        print("📧 Email: \(session.user.email ?? "no email")")
+        print("📧 Email: \(userEmail)")
         print("🔑 Access Token exists: \(session.accessToken.isEmpty == false)")
         
         // Upload profile picture first if exists
@@ -153,7 +152,6 @@ final class AuthManager {
                 profilePictureURL = try await uploadProfilePicture(image, userId: userId)
             } catch {
                 print("❌ Profile picture upload failed: \(error)")
-                // Don't throw - continue saving profile without picture
                 print("⚠️ Continuing without profile picture...")
             }
         } else {
@@ -162,16 +160,26 @@ final class AuthManager {
         
         print("💾 Saving profile to database...")
         
+        // Use stored username and fullName from signup
+        let username = profileData.username ?? userEmail.components(separatedBy: "@").first ?? "user\(Int.random(in: 1000...9999))"
+        let fullName = profileData.fullName
+        
         // Create profile struct for encoding
-        let profile = ProfileRecord(
+        let profile = ProfileRecordForSave(
             id: userId.uuidString,
-            dateOfBirth: ISO8601DateFormatter().string(from: profileData.dateOfBirth ?? Date()),
-            role: profileData.role?.rawValue.lowercased() ?? "",
-            employmentStatus: profileData.employmentStatus ?? "",
+            username: username,
+            fullName: fullName,
+            dateOfBirth: profileData.dateOfBirth.map {
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy-MM-dd"
+                return formatter.string(from: $0)
+            },
+            profilePictureUrl: profilePictureURL,
+            role: profileData.role?.rawValue.lowercased().replacingOccurrences(of: " ", with: "_") ?? "",
+            employmentStatus: profileData.employmentStatus,
             locationState: profileData.locationState,
             postalCode: profileData.postalCode,
-            locationCity: profileData.locationCity,
-            profilePictureUrl: profilePictureURL
+            locationCity: profileData.locationCity
         )
         
         do {
@@ -180,6 +188,8 @@ final class AuthManager {
                 .execute()
             
             print("✅ Profile saved to database")
+            print("   Username: \(username)")
+            print("   Full Name: \(fullName ?? "nil")")
         } catch {
             print("❌ Database error saving profile: \(error)")
             throw error
@@ -199,7 +209,7 @@ final class AuthManager {
     
     // MARK: - Private Helper Methods
     private func saveArtistProfile(_ data: ProfileData, userId: UUID) async throws {
-        let artistProfile = ArtistProfileRecord(
+        let artistProfile = ArtistProfileRecordForSave(
             id: userId.uuidString,
             primaryRoles: Array(data.primaryRoles),
             careerStage: data.careerStage,
@@ -221,7 +231,7 @@ final class AuthManager {
     }
     
     private func saveCastingProfile(_ data: ProfileData, userId: UUID) async throws {
-        let castingProfile = CastingProfileRecord(
+        let castingProfile = CastingProfileRecordForSave(
             id: userId.uuidString,
             specificRole: data.specificRole,
             companyName: data.companyName,
@@ -243,30 +253,34 @@ final class AuthManager {
     }
 }
 
-// MARK: - Database Record Structures
-struct ProfileRecord: Encodable {
+// MARK: - Database Record Structures for SAVING (Encodable only)
+struct ProfileRecordForSave: Encodable {
     let id: String
-    let dateOfBirth: String
+    let username: String?
+    let fullName: String?
+    let dateOfBirth: String?
+    let profilePictureUrl: String?
     let role: String
-    let employmentStatus: String
+    let employmentStatus: String?
     let locationState: String?
     let postalCode: String?
     let locationCity: String?
-    let profilePictureUrl: String?
     
     enum CodingKeys: String, CodingKey {
         case id
+        case username
+        case fullName = "full_name"
         case dateOfBirth = "date_of_birth"
+        case profilePictureUrl = "profile_picture_url"
         case role
         case employmentStatus = "employment_status"
         case locationState = "location_state"
         case postalCode = "postal_code"
         case locationCity = "location_city"
-        case profilePictureUrl = "profile_picture_url"
     }
 }
 
-struct ArtistProfileRecord: Encodable {
+struct ArtistProfileRecordForSave: Encodable {
     let id: String
     let primaryRoles: [String]
     let careerStage: String?
@@ -284,7 +298,7 @@ struct ArtistProfileRecord: Encodable {
     }
 }
 
-struct CastingProfileRecord: Encodable {
+struct CastingProfileRecordForSave: Encodable {
     let id: String
     let specificRole: String?
     let companyName: String?
@@ -302,11 +316,87 @@ struct CastingProfileRecord: Encodable {
     }
 }
 
+// MARK: - Database Record Structures for READING (Codable - both encode & decode)
+struct ProfileRecord: Codable {
+    let id: String
+    let username: String?
+    let fullName: String?
+    let dateOfBirth: String?
+    let profilePictureUrl: String?
+    let role: String
+    let employmentStatus: String?
+    let locationState: String?
+    let postalCode: String?
+    let locationCity: String?
+    let createdAt: String?
+    let updatedAt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case username
+        case fullName = "full_name"
+        case dateOfBirth = "date_of_birth"
+        case profilePictureUrl = "profile_picture_url"
+        case role
+        case employmentStatus = "employment_status"
+        case locationState = "location_state"
+        case postalCode = "postal_code"
+        case locationCity = "location_city"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+struct ArtistProfileRecord: Codable {
+    let id: String
+    let primaryRoles: [String]
+    let careerStage: String?
+    let skills: [String]
+    let experienceYears: String?
+    let headshotUrl: String?
+    let mediaUrls: [String]?
+    let travelWilling: Bool?
+    let createdAt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case primaryRoles = "primary_roles"
+        case careerStage = "career_stage"
+        case skills
+        case experienceYears = "experience_years"
+        case headshotUrl = "headshot_url"
+        case mediaUrls = "media_urls"
+        case travelWilling = "travel_willing"
+        case createdAt = "created_at"
+    }
+}
+
+struct CastingProfileRecord: Codable {
+    let id: String
+    let specificRole: String?
+    let companyName: String?
+    let castingTypes: [String]
+    let castingRadius: Int?
+    let contactPreference: String?
+    let createdAt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case specificRole = "specific_role"
+        case companyName = "company_name"
+        case castingTypes = "casting_types"
+        case castingRadius = "casting_radius"
+        case contactPreference = "contact_preference"
+        case createdAt = "created_at"
+    }
+}
+
 // MARK: - Profile Errors
 enum ProfileError: Error {
     case imageCompressionFailed
     case invalidSession
     case uploadFailed
+    case noProfileFound
 }
 
 extension Notification.Name {
