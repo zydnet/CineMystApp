@@ -1,4 +1,5 @@
 import UIKit
+import Supabase
 
 class PostedJobsDashboardViewController: UIViewController {
 
@@ -84,6 +85,9 @@ class PostedJobsDashboardViewController: UIViewController {
 
             // Hide tab bar only
             tabBarController?.tabBar.isHidden = true
+            
+            // Reload data to show updated job statuses
+            loadCards(for: segmentedControl.selectedSegmentIndex)
 
             // If you also have a floating button on your custom TabBarController,
             // you'll need to hide/show it here as well. Example:
@@ -167,29 +171,58 @@ class PostedJobsDashboardViewController: UIViewController {
 
     // MARK: - Load Cards
     private func loadCards(for index: Int) {
-
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         
+        let sectionName = ["Active Jobs", "Pending", "Completed"][index]
+        print("📱 Loading \(sectionName) section...")
         
-        let data: [JobCardModel]
-
-        switch index {
-        case 0: data = JobCardModel.activeSeed
-        case 1: data = JobCardModel.pendingSeed
-        case 2: data = JobCardModel.completedSeed
-        default: data = []
-        }
-
-        for job in data {
-            let card = JobTrackCardView()
-            card.configure(with: job)
-            card.onViewApplicationsTapped = { [weak self] in
-                           let vc = SwipeScreenViewController()
-                           self?.navigationController?.pushViewController(vc, animated: true)
-                       }
-            
-
-            stackView.addArrangedSubview(card)
+        // Fetch jobs from database
+        Task { [weak self] in
+            do {
+                guard let userId = supabase.auth.currentUser?.id else {
+                    print("❌ User not authenticated")
+                    return
+                }
+                
+                let status: Job.JobStatus?
+                switch index {
+                case 0: status = .active
+                case 1: status = .pending
+                case 2: status = .completed
+                default: status = nil
+                }
+                
+                print("🔍 Fetching jobs with status: \(status?.rawValue ?? "all")")
+                
+                let jobs = try await JobsService.shared.fetchJobsByDirector(directorId: userId, status: status)
+                
+                print("✅ Found \(jobs.count) jobs for \(sectionName)")
+                for job in jobs {
+                    print("   - \(job.title) | Status: \(job.status.rawValue) | ID: \(job.id.uuidString.prefix(8))")
+                }
+                
+                await MainActor.run {
+                    guard let self = self else { return }
+                    
+                    for job in jobs {
+                        let jobCardModel = job.toJobCardModel(applicationsCount: 0)
+                        let card = JobTrackCardView()
+                        card.configure(with: jobCardModel)
+                        card.onViewApplicationsTapped = { [weak self] in
+                            let vc = SwipeScreenViewController()
+                            vc.job = job
+                            self?.navigationController?.pushViewController(vc, animated: true)
+                        }
+                        self.stackView.addArrangedSubview(card)
+                    }
+                    
+                    if jobs.isEmpty {
+                        print("ℹ️ No jobs to display in \(sectionName)")
+                    }
+                }
+            } catch {
+                print("❌ Error loading director jobs: \(error)")
+            }
         }
     }
 

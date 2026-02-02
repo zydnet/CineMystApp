@@ -1,9 +1,18 @@
 import UIKit
+import Supabase
 
 class ApplicationStartedViewController: UIViewController {
     
+    // MARK: - Properties
+    var job: Job?
+    private let supabase = SupabaseClient(
+        supabaseURL: URL(string: "https://kyhyunyobgouumgwcigk.supabase.co")!,
+        supabaseKey: "sb_publishable_oJe1X9aiPdKm6wqR1zvFhA_aIiej9-d"
+    )
+    
     @objc private func goToTask() {
         let vc = TaskDetailsViewController()
+        vc.job = job // Pass job data to task details
         navigationController?.pushViewController(vc, animated: true)
     }
     
@@ -143,14 +152,110 @@ class ApplicationStartedViewController: UIViewController {
         navigationController?.popViewController(animated: true)
     }
     
+    private func showAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+    
+    private func showSuccessAlert(title: String, message: String, completion: @escaping () -> Void) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+            completion()
+        })
+        present(alert, animated: true)
+    }
+    
     
     // MARK: - Actions
     @objc private func portfolioSubmitted() {
-        let alert = UIAlertController(title: "Success",
-                                      message: "Portfolio Submitted",
-                                      preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+        Task {
+            await submitPortfolio()
+        }
+    }
+    
+    private func submitPortfolio() async {
+        guard let job = job,
+              let currentUser = supabase.auth.currentUser else {
+            showAlert(title: "Error", message: "Missing job or user information")
+            return
+        }
+        
+        do {
+            let actorId = currentUser.id
+            
+            print("📝 Submitting Portfolio:")
+            print("  - Actor ID: \(actorId.uuidString)")
+            print("  - Job ID: \(job.id.uuidString)")
+            
+            // Step 1: Check if application already exists
+            let existingApps: [Application] = try await supabase
+                .from("applications")
+                .select()
+                .eq("job_id", value: job.id.uuidString)
+                .eq("actor_id", value: actorId.uuidString)
+                .execute()
+                .value
+            
+            print("  - Existing apps found: \(existingApps.count)")
+            
+            if let existingApp = existingApps.first {
+                // Step 2: Update existing application with portfolio_submitted status
+                let updatedApplication = Application(
+                    id: existingApp.id,
+                    jobId: existingApp.jobId,
+                    actorId: existingApp.actorId,
+                    status: .portfolioSubmitted,
+                    portfolioUrl: currentUser.userMetadata["portfolio_url"] as? String,
+                    portfolioSubmittedAt: Date(),
+                    appliedAt: existingApp.appliedAt,
+                    updatedAt: Date()
+                )
+                
+                let _: Application = try await supabase
+                    .from("applications")
+                    .update(updatedApplication)
+                    .eq("id", value: existingApp.id.uuidString)
+                    .single()
+                    .execute()
+                    .value
+                
+                print("  ✅ Updated existing application")
+            } else {
+                // Step 3: Create new application record with portfolio_submitted status
+                let application = Application(
+                    id: UUID(),
+                    jobId: job.id,
+                    actorId: actorId,
+                    status: .portfolioSubmitted,
+                    portfolioUrl: currentUser.userMetadata["portfolio_url"] as? String,
+                    portfolioSubmittedAt: Date(),
+                    appliedAt: Date(),
+                    updatedAt: Date()
+                )
+                
+                print("  - Creating new application with:")
+                print("    - App ID: \(application.id.uuidString)")
+                print("    - Job ID: \(application.jobId.uuidString)")
+                print("    - Actor ID: \(application.actorId.uuidString)")
+                
+                let _: Application = try await supabase
+                    .from("applications")
+                    .insert(application)
+                    .single()
+                    .execute()
+                    .value
+                
+                print("  ✅ Created new application")
+            }
+            
+            // Show success message
+            showSuccessAlert(title: "Success", message: "Portfolio submitted! Your application is now visible in Active section.") { [weak self] in
+                self?.navigationController?.popViewController(animated: true)
+            }
+        } catch {
+            showAlert(title: "Error", message: "Failed to submit portfolio: \(error.localizedDescription)")
+        }
     }
     
     

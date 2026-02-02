@@ -90,20 +90,27 @@ class CandidateCardView: UIView {
     // MARK: - Setup Video
 
     private func setupVideo() {
-        // Get video URL from bundle
-        guard let videoURL = Bundle.main.url(forResource: model.videoName, withExtension: "mp4") else {
-            print("❌ Video not found: \(model.videoName).mp4")
+        // Prefer remote URL if available, else fall back to bundled asset
+        let urlToPlay: URL?
+        if let remote = model.videoURL {
+            urlToPlay = remote
+        } else {
+            urlToPlay = Bundle.main.url(forResource: model.videoName, withExtension: "mp4")
+        }
+
+        guard let videoURL = urlToPlay else {
+            print("❌ CandidateCardView: No valid video URL for model \(model.name)")
             return
         }
 
         // Create player
         player = AVPlayer(url: videoURL)
-        
+
         // Create player layer
         playerLayer = AVPlayerLayer(player: player)
         playerLayer?.videoGravity = .resizeAspectFill
         playerLayer?.frame = videoContainerView.bounds
-        
+
         if let playerLayer = playerLayer {
             videoContainerView.layer.addSublayer(playerLayer)
         }
@@ -120,7 +127,7 @@ class CandidateCardView: UIView {
 
         // Start playing
         player?.play()
-        
+
         // Mute by default (optional)
         player?.isMuted = true
     }

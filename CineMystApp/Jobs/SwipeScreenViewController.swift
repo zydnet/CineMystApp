@@ -1,11 +1,17 @@
 import UIKit
+import Supabase
 
 class SwipeScreenViewController: UIViewController {
 
-    private var cardData: [CandidateModel] = CandidateModel.sampleData
+    var job: Job?
+    private var cardData: [CandidateModel] = []
+    private var taskSubmissions: [TaskSubmission] = []
+    private var applications: [Application] = []
     private var cardViews: [CandidateCardView] = []
     private let maxCardsOnScreen = 3
     private var cardsLoaded = false
+    
+    // Use shared Supabase client defined in auth/Supabase.swift
 
     // MARK: - NEW COUNTERS
     private var shortlistedCount = 0
@@ -19,22 +25,11 @@ class SwipeScreenViewController: UIViewController {
         setupNavigationBar()
         setupUI()
     }
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-
-        // Restore tab bar only
-        tabBarController?.tabBar.isHidden = false
-
-        // Restore floating button if you hid it above:
-        // if let tb = tabBarController as? CineMystTabBarController {
-        //     tb.setFloatingButton(hidden: false)
-        // }
-    }
-
-
+    
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         tabBarController?.tabBar.isHidden = true
+        
         let appearance = UINavigationBarAppearance()
         appearance.configureWithTransparentBackground()
         appearance.titleTextAttributes = [
@@ -45,6 +40,9 @@ class SwipeScreenViewController: UIViewController {
         navigationController?.navigationBar.standardAppearance = appearance
         navigationController?.navigationBar.scrollEdgeAppearance = appearance
         navigationController?.navigationBar.compactAppearance = appearance
+        
+        // Reload submissions when view appears
+        loadSubmissions()
     }
 
     override func viewDidLayoutSubviews() {
@@ -66,7 +64,7 @@ class SwipeScreenViewController: UIViewController {
         titleLabel.textAlignment = .center
 
         let subtitleLabel = UILabel()
-        subtitleLabel.text = "Lead Actor - Drama Series City of Dre"
+        subtitleLabel.text = job?.title ?? "Loading..."
         subtitleLabel.font = UIFont.systemFont(ofSize: 12)
         subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.7)
         subtitleLabel.textAlignment = .center
@@ -243,9 +241,30 @@ class SwipeScreenViewController: UIViewController {
 
     // MARK: Load Cards
     private func loadCards() {
+        // Remove any empty state labels
+        view.subviews.compactMap { $0 as? UILabel }.filter { $0.tag == 4040 }.forEach { $0.removeFromSuperview() }
+        
         cardViews.removeAll()
 
-        for (index, model) in cardData.prefix(maxCardsOnScreen).enumerated() {
+        let models = cardData.prefix(maxCardsOnScreen)
+        if models.isEmpty {
+            // Show empty state
+            let lbl = UILabel()
+            lbl.tag = 4040
+            lbl.text = "No candidates to review yet"
+            lbl.textColor = UIColor.white.withAlphaComponent(0.7)
+            lbl.font = .systemFont(ofSize: 16, weight: .medium)
+            lbl.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(lbl)
+            NSLayoutConstraint.activate([
+                lbl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                lbl.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -40)
+            ])
+            bringUIElementsToFront()
+            return
+        }
+
+        for (index, model) in models.enumerated() {
             let card = CandidateCardView(model: model)
             let position = maxCardsOnScreen - 1 - index
             setupCardFrame(card, position: position)
@@ -255,6 +274,109 @@ class SwipeScreenViewController: UIViewController {
         }
 
         bringUIElementsToFront()
+    }
+    
+    // MARK: - Load Submissions
+    private func loadSubmissions() {
+        Task {
+            do {
+                guard let job = job else {
+                    print("❌ No job provided to SwipeScreenViewController")
+                    return
+                }
+                
+                print("📥 Loading submissions for job: \(job.id.uuidString)")
+                
+                // Fetch all applications for this job (do not filter by status)
+                let applications: [Application] = try await supabase
+                    .from("applications")
+                    .select()
+                    .eq("job_id", value: job.id.uuidString)
+                    .execute()
+                    .value
+                
+                self.applications = applications
+                print("✅ Fetched \(applications.count) applications for job")
+                for app in applications {
+                    print("   - App \(app.id.uuidString.prefix(8)): Actor=\(app.actorId.uuidString.prefix(8)), Status=\(app.status)")
+                }
+                
+                // Fetch task submissions for all applications
+                var submissions: [TaskSubmission] = []
+                for app in applications {
+                    do {
+                        let appSubmissions: [TaskSubmission] = try await supabase
+                            .from("task_submissions")
+                            .select()
+                            .eq("application_id", value: app.id.uuidString)
+                            .order("submitted_at", ascending: false)
+                            .execute()
+                            .value
+                        submissions.append(contentsOf: appSubmissions)
+                    } catch {
+                        print("⚠️ Warning: Could not fetch submissions for app \(app.id): \(error)")
+                    }
+                }
+                
+                self.taskSubmissions = submissions
+                print("✅ Fetched \(submissions.count) task submissions")
+                
+                // Build cards ONLY for applications that have at least one submission
+                let submissionsByApp = Dictionary(grouping: submissions, by: { $0.applicationId })
+                
+                print("🔍 Building card data:")
+                print("  - Total applications: \(applications.count)")
+                print("  - Applications with submissions: \(submissionsByApp.count)")
+                
+                self.cardData = applications.compactMap { app in
+                    // First, check if there are task submissions
+                    if let appSubs = submissionsByApp[app.id], let latest = appSubs.first {
+                        let videoURL = latest.submissionUrl
+                        guard !videoURL.isEmpty else { return nil }
+                        
+                        print("  ✅ Card with submission: \(app.id.uuidString.prefix(8)), Status: \(app.status)")
+                        
+                        return CandidateModel(
+                            name: "Applicant \(app.id.uuidString.prefix(8))",
+                            videoURL: URL(string: videoURL),
+                            videoName: "", // remote video provided via videoURL
+                            location: "India",
+                            experience: "Task Submitted"
+                        )
+                    } else {
+                        // No task submission, but still show the application if it has portfolio_submitted or higher status
+                        if app.status == .portfolioSubmitted || app.status == .taskSubmitted || app.status == .shortlisted || app.status == .selected {
+                            print("  ✅ Card without submission (portfolio_submitted): \(app.id.uuidString.prefix(8)), Status: \(app.status)")
+                            
+                            return CandidateModel(
+                                name: "Applicant \(app.id.uuidString.prefix(8))",
+                                videoURL: nil,
+                                videoName: "", // No video yet
+                                location: "India",
+                                experience: "Portfolio Submitted"
+                            )
+                        } else {
+                            print("  ❌ Skipping application with status: \(app.status)")
+                            return nil
+                        }
+                    }
+                }
+                
+                print("✅ Prepared \(self.cardData.count) card models for rendering")
+                
+                DispatchQueue.main.async {
+                    // Clear old cards
+                    self.cardViews.forEach { $0.removeFromSuperview() }
+                    self.cardViews.removeAll()
+                    self.cardsLoaded = false
+                    
+                    // Reload cards
+                    self.loadCards()
+                }
+            } catch {
+                print("❌ Error loading submissions: \(error)")
+            }
+        }
     }
 
     private func bringUIElementsToFront() {
@@ -269,9 +391,10 @@ class SwipeScreenViewController: UIViewController {
         let cardWidth: CGFloat = view.bounds.width - 90 - inset * 2
         let cardHeight: CGFloat = 470
 
+        let topY: CGFloat = max(140, view.safeAreaInsets.top + 120)
         card.frame = CGRect(
             x: (view.bounds.width - cardWidth) / 2 + inset,
-            y: 220 + inset,
+            y: topY + inset,
             width: cardWidth,
             height: cardHeight
         )
@@ -372,6 +495,7 @@ class SwipeScreenViewController: UIViewController {
 
     @objc private func openApplicationsScreen() {
         let vc = ApplicationsViewController()
+        vc.job = job
         navigationController?.pushViewController(vc, animated: true)
     }
 }

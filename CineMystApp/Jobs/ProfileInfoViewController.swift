@@ -4,6 +4,7 @@
 //
 
 import UIKit
+import Supabase
 
 class ProfileInfoViewController: UIViewController {
 
@@ -26,6 +27,13 @@ class ProfileInfoViewController: UIViewController {
     // Multi-select sets for pills
     private var selectedSpecializations = Set<String>()
     private var selectedUnions = Set<String>()
+    
+    // Store text field references
+    private var professionalTitleTextField: UITextField?
+    private var productionHouseTextField: UITextField?
+    private var primaryLocationTextField: UITextField?
+    private var websiteTextField: UITextField?
+    private var imdbProfileTextField: UITextField?
 
     // MARK: - Helpers (UI builders)
     private func sectionHeader(_ text: String) -> UILabel {
@@ -50,6 +58,19 @@ class ProfileInfoViewController: UIViewController {
         tf.layer.cornerRadius = 8
         tf.setPaddingLeft(12)
         tf.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        
+        // Store reference based on title
+        if title == "Professional Title *" {
+            professionalTitleTextField = tf
+        } else if title == "Production House *" {
+            productionHouseTextField = tf
+        } else if title == "Primary Location *" {
+            primaryLocationTextField = tf
+        } else if title == "Website/Portfolio" {
+            websiteTextField = tf
+        } else if title == "IMDb Profile" {
+            imdbProfileTextField = tf
+        }
 
         let stack = UIStackView(arrangedSubviews: [titleLabel, tf])
         stack.axis = .vertical
@@ -291,7 +312,59 @@ class ProfileInfoViewController: UIViewController {
 
         // Hide tab bar only
         tabBarController?.tabBar.isHidden = true
+        
+        // Load existing profile data if available
+        Task {
+            await loadExistingProfile()
+        }
     }
+    private func loadExistingProfile() async {
+        do {
+            guard let userId = supabase.auth.currentUser?.id else { return }
+            
+            // Fetch casting profile
+            let castingProfile: CastingProfileRecord = try await supabase
+                .from("casting_profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            // Fetch main profile for location
+            let profile: ProfileRecord = try await supabase
+                .from("profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            await MainActor.run {
+                // Populate text fields
+                professionalTitleTextField?.text = castingProfile.specificRole
+                productionHouseTextField?.text = castingProfile.companyName
+                primaryLocationTextField?.text = profile.locationCity
+                
+                // Populate specializations
+                selectedSpecializations = Set(castingProfile.castingTypes)
+                
+                // Populate contract type from profile
+                if let contract = profile.employmentStatus {
+                    selectedContract = contract
+                }
+                
+                print("✅ Loaded existing profile data")
+                
+                // Rebuild the UI to reflect loaded data
+                contentView.subviews.forEach { $0.removeFromSuperview() }
+                buildLayout()
+            }
+        } catch {
+            print("ℹ️ No existing profile found (creating new): \(error)")
+        }
+    }
+    
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
 
@@ -300,8 +373,89 @@ class ProfileInfoViewController: UIViewController {
     }
 
     @objc private func nextTapped() {
-        let vc = PostJobViewController()
-        navigationController?.pushViewController(vc, animated: true)
+        // Save profile info to database first
+        Task {
+            do {
+                try await saveDirectorProfile()
+                await MainActor.run {
+                    // Check if we came from TaskDetailsViewController (already in navigation stack)
+                    if navigationController?.viewControllers.contains(where: { $0 is TaskDetailsViewController }) == true {
+                        // Pop back to TaskDetailsViewController
+                        navigationController?.popViewController(animated: true)
+                    } else {
+                        // Otherwise navigate to PostJobViewController
+                        let vc = PostJobViewController()
+                        navigationController?.pushViewController(vc, animated: true)
+                    }
+                }
+            } catch {
+                print("❌ Error saving director profile: \(error)")
+                await MainActor.run {
+                    self.showAlert(title: "Error", message: "Failed to save profile: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func saveDirectorProfile() async throws {
+        // Get current user ID
+        guard let userId = supabase.auth.currentUser?.id else {
+            throw NSError(domain: "Auth", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+        }
+        
+        // Extract form values from stored references
+        let professionalTitle = professionalTitleTextField?.text ?? ""
+        let productionHouse = productionHouseTextField?.text ?? ""
+        let primaryLocation = primaryLocationTextField?.text ?? ""
+        let website = websiteTextField?.text ?? ""
+        let imdbProfile = imdbProfileTextField?.text ?? ""
+        
+        // Use casting_profiles table since director_profiles doesn't exist
+        // Map director profile fields to casting profile structure
+        let castingProfile = CastingProfileRecordForSave(
+            id: userId.uuidString,
+            specificRole: professionalTitle.isEmpty ? nil : professionalTitle,
+            companyName: productionHouse.isEmpty ? nil : productionHouse,
+            castingTypes: Array(selectedSpecializations), // Use specializations as casting types
+            castingRadius: nil, // Not applicable for directors
+            contactPreference: nil
+        )
+        
+        // Save to casting_profiles table (upsert to update if exists)
+        try await supabase
+            .from("casting_profiles")
+            .upsert(castingProfile)
+            .execute()
+        
+        // Also save/update the main profile with location info
+        // This ensures location is available for job posting
+        // Use "casting_professional" as the role since "director" is not a valid role in the database
+        let profile = ProfileRecordForSave(
+            id: userId.uuidString,
+            username: nil,
+            fullName: nil,
+            dateOfBirth: nil,
+            profilePictureUrl: nil,
+            role: "casting_professional", // Use casting_professional as directors are a type of casting professional
+            employmentStatus: selectedContract,
+            locationState: nil,
+            postalCode: nil,
+            locationCity: primaryLocation.isEmpty ? nil : primaryLocation
+        )
+        
+        try await supabase
+            .from("profiles")
+            .upsert(profile)
+            .execute()
+        
+        print("✅ Director profile saved successfully to casting_profiles and profiles tables")
+    }
+    
+    
+    private func showAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 
     // MARK: - Pills (specializations / unions)
@@ -628,5 +782,38 @@ extension UITextField {
         let padding = UIView(frame: CGRect(x: 0, y: 0, width: amount, height: 44))
         leftView = padding
         leftViewMode = .always
+    }
+}
+
+// MARK: - Director Profile Record
+struct DirectorProfileRecord: Codable {
+    let id: String
+    let professionalTitle: String?
+    let productionHouse: String?
+    let companyType: String?
+    let experienceYears: String?
+    let primaryLocation: String?
+    let additionalLocations: String?
+    let specializations: [String]
+    let unionAffiliations: [String]
+    let website: String?
+    let imdbProfile: String?
+    let preferredContract: String?
+    let budgetRange: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case professionalTitle = "professional_title"
+        case productionHouse = "production_house"
+        case companyType = "company_type"
+        case experienceYears = "experience_years"
+        case primaryLocation = "primary_location"
+        case additionalLocations = "additional_locations"
+        case specializations
+        case unionAffiliations = "union_affiliations"
+        case website
+        case imdbProfile = "imdb_profile"
+        case preferredContract = "preferred_contract"
+        case budgetRange = "budget_range"
     }
 }

@@ -1,5 +1,6 @@
 import UIKit
 import PhotosUI
+import Supabase
 
 // MARK: - Custom Color
 extension UIColor {
@@ -15,7 +16,7 @@ class PostJobViewController: UIViewController {
     private let formStack: UIStackView = {
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 20
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         return stack
     }()
@@ -24,9 +25,19 @@ class PostJobViewController: UIViewController {
     private let cancelButton = UIButton.createOutlineButton(title: "Cancel")
     
     // MARK: - Form Data Properties
+    private var taskTitleTextField: UITextField?
+    private var taskDescriptionTextView: UITextView?
     private var dueDateTextField: UITextField?
+    private var characterNameTextField: UITextField?
+    private var characterDescriptionTextView: UITextView?
+    private var characterAgeTextField: UITextField?
     private var applicationDeadlineTextField: UITextField?
     private var genreLabel: UILabel?
+    private var personalityTraitsTextView: UITextView?
+    private var sceneTitleTextField: UITextField?
+    private var settingDescriptionTextView: UITextView?
+    private var expectedDurationTextField: UITextField?
+    private var paymentAmountTextField: UITextField?
     private var uploadedFileName: UILabel?
     private var selectedDueDate: Date?
     private var selectedDeadlineDate: Date?
@@ -101,10 +112,15 @@ class PostJobViewController: UIViewController {
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
+    
+    // MARK: - Saved Profile Properties
+    private var savedCastingProfile: CastingProfileRecord?
+    private var profileSummaryCard: UIView?
 
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .systemGroupedBackground
         setupNavBar()
         setupScrollView()
         buildForm()
@@ -113,6 +129,10 @@ class PostJobViewController: UIViewController {
         setupDatePickers()
         setupKeyboardDismissal()
         
+        // Fetch saved casting profile
+        Task {
+            await fetchSavedCastingProfile()
+        }
     }
     override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
@@ -157,6 +177,7 @@ class PostJobViewController: UIViewController {
     // MARK: - ScrollView + Content
     private func setupScrollView() {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.backgroundColor = .systemGroupedBackground
         contentView.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(scrollView)
@@ -328,14 +349,261 @@ class PostJobViewController: UIViewController {
         assignTaskButton.isEnabled = false
         cancelButton.isEnabled = false
         
+        // Validate required fields
+        guard let taskTitle = taskTitleTextField?.text, !taskTitle.isEmpty else {
+            showAlert(title: "Missing Field", message: "Task Title is required")
+            assignTaskButton.isEnabled = true
+            cancelButton.isEnabled = true
+            return
+        }
+        
+        guard let taskDescription = taskDescriptionTextView?.text, 
+              taskDescription != "Describe what the actor needs...",
+              !taskDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            showAlert(title: "Missing Field", message: "Description is required")
+            assignTaskButton.isEnabled = true
+            cancelButton.isEnabled = true
+            return
+        }
+        
+        guard let applicationDeadline = selectedDeadlineDate else {
+            showAlert(title: "Missing Field", message: "Application Deadline is required")
+            assignTaskButton.isEnabled = true
+            cancelButton.isEnabled = true
+            return
+        }
+        
+        // Extract payment amount
+        let paymentText = paymentAmountTextField?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "5000"
+        let paymentValue = Int(paymentText.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()) ?? 5000
+        
+        // Extract other form values
+        let characterName = characterNameTextField?.text ?? ""
+        let characterDescription = characterDescriptionTextView?.text ?? ""
+        let sceneTitle = sceneTitleTextField?.text ?? ""
+        let genre = selectedGenre ?? "Drama"
+        
+        // Create description combining task and character info
+        var combinedDescription = taskDescription
+        if !characterName.isEmpty || !characterDescription.isEmpty {
+            combinedDescription += "\n\nCharacter: \(characterName)"
+            if !characterDescription.isEmpty {
+                combinedDescription += "\n\(characterDescription)"
+            }
+            // Add age range if available
+            if let age = characterAgeTextField?.text, !age.isEmpty {
+                combinedDescription += "\nAge: \(age)"
+            }
+        }
+        if let personality = personalityTraitsTextView?.text, 
+           personality != "e.g., confident, emotional",
+           !personality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            combinedDescription += "\n\nPersonality: \(personality)"
+        }
+        
+        // Create requirements from scene info
+        var requirements = ""
+        if !sceneTitle.isEmpty {
+            requirements += "Scene: \(sceneTitle)\n"
+        }
+        if let setting = settingDescriptionTextView?.text,
+           setting != "Describe the setting",
+           !setting.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            requirements += "Setting: \(setting)\n"
+        }
+        if let duration = expectedDurationTextField?.text, !duration.isEmpty {
+            requirements += "Duration: \(duration)"
+        }
+        
         // Add haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
-        // Simulate API call/processing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.showSuccessAnimation()
+        // Save job to database
+        Task {
+            do {
+                // Get current user ID (director ID)
+                guard let userId = try await getCurrentUserId() else {
+                    await MainActor.run {
+                        self.showAlert(title: "Error", message: "User not authenticated")
+                        self.assignTaskButton.isEnabled = true
+                        self.cancelButton.isEnabled = true
+                    }
+                    return
+                }
+                
+                // For now, use placeholder values for company and location
+                // These should ideally come from ProfileInfoViewController
+                let companyName = "Production Company" // TODO: Get from profile
+                let location = "Mumbai, India" // TODO: Get from profile
+                
+                // Upload reference material if selected
+                var referenceMaterialUrl: String? = nil
+                if let fileURL = uploadedFileURL {
+                    print("📤 Starting file upload: \(fileURL.lastPathComponent)")
+                    do {
+                        referenceMaterialUrl = try await uploadReferenceFile(fileURL)
+                        print("✅ Uploaded reference material successfully")
+                        print("   URL: \(referenceMaterialUrl ?? "nil")")
+                    } catch {
+                        print("❌ Failed to upload reference material: \(error)")
+                        print("   Error details: \(error.localizedDescription)")
+                        // Show alert but continue without reference material
+                        await MainActor.run {
+                            let alert = UIAlertController(
+                                title: "Upload Failed",
+                                message: "Reference material could not be uploaded. Job will be created without it. Error: \(error.localizedDescription)",
+                                preferredStyle: .alert
+                            )
+                            alert.addAction(UIAlertAction(title: "Continue", style: .default))
+                            self.present(alert, animated: true)
+                        }
+                        // Give user time to see the alert
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    }
+                } else {
+                    print("ℹ️ No reference material file selected")
+                }
+                
+                // Create Job object
+                let job = Job(
+                    id: UUID(),
+                    directorId: userId,
+                    title: taskTitle,
+                    companyName: companyName,
+                    location: location,
+                    ratePerDay: paymentValue,
+                    jobType: genre,
+                    description: combinedDescription.isEmpty ? nil : combinedDescription,
+                    requirements: requirements.isEmpty ? nil : requirements,
+                    referenceMaterialUrl: referenceMaterialUrl,
+                    status: .active,
+                    applicationDeadline: applicationDeadline,
+                    createdAt: Date(),
+                    updatedAt: Date()
+                )
+                
+                // Save to database
+                let savedJob = try await JobsService.shared.createJob(job)
+                print("✅ Job saved successfully: \(savedJob.id)")
+                print("   Reference Material URL in saved job: \(savedJob.referenceMaterialUrl ?? "nil")")
+                
+                // Show success animation
+                await MainActor.run {
+                    self.showSuccessAnimation()
+                }
+            } catch {
+                print("❌ Error saving job: \(error)")
+                print("   Error details: \(error)")
+                if let decodingError = error as? DecodingError {
+                    print("   Decoding error: \(decodingError)")
+                    switch decodingError {
+                    case .typeMismatch(let type, let context):
+                        print("   Type mismatch: expected \(type), context: \(context)")
+                    case .valueNotFound(let type, let context):
+                        print("   Value not found: \(type), context: \(context)")
+                    case .keyNotFound(let key, let context):
+                        print("   Key not found: \(key), context: \(context)")
+                    case .dataCorrupted(let context):
+                        print("   Data corrupted: \(context)")
+                    @unknown default:
+                        print("   Unknown decoding error")
+                    }
+                }
+                await MainActor.run {
+                    let errorMessage = (error as? DecodingError) != nil 
+                        ? "Failed to save job: Invalid data format. Please check all fields."
+                        : "Failed to save job: \(error.localizedDescription)"
+                    self.showAlert(title: "Error", message: errorMessage)
+                    self.assignTaskButton.isEnabled = true
+                    self.cancelButton.isEnabled = true
+                }
+            }
         }
+    }
+    
+    private func uploadReferenceFile(_ fileURL: URL) async throws -> String {
+        print("📤 uploadReferenceFile called")
+        print("   File URL: \(fileURL)")
+        
+        // Get the file name and data
+        let fileName = fileURL.lastPathComponent
+        print("   File name: \(fileName)")
+        
+        // Start accessing security-scoped resource
+        let accessed = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        let fileData = try Data(contentsOf: fileURL)
+        print("   File size: \(fileData.count) bytes")
+        
+        // Generate unique file name
+        let uniqueFileName = "\(UUID().uuidString)_\(fileName)"
+        let filePath = "reference_materials/\(uniqueFileName)"
+        print("   Upload path: \(filePath)")
+        
+        let mimeType = getMimeType(for: fileURL)
+        print("   MIME type: \(mimeType)")
+        
+        // Upload to Supabase Storage
+        do {
+            let uploadResult = try await supabase.storage
+                .from("job-files")
+                .upload(
+                    path: filePath,
+                    file: fileData,
+                    options: FileOptions(
+                        cacheControl: "3600",
+                        contentType: mimeType,
+                        upsert: false
+                    )
+                )
+            print("✅ Upload successful: \(uploadResult)")
+        } catch {
+            print("❌ Upload failed: \(error)")
+            throw error
+        }
+        
+        // Get public URL
+        let publicURL = try supabase.storage
+            .from("job-files")
+            .getPublicURL(path: filePath)
+        
+        print("🔗 Public URL: \(publicURL.absoluteString)")
+        return publicURL.absoluteString
+    }
+    
+    private func getMimeType(for url: URL) -> String {
+        let pathExtension = url.pathExtension.lowercased()
+        switch pathExtension {
+        case "mp4":
+            return "video/mp4"
+        case "mov":
+            return "video/quicktime"
+        case "jpg", "jpeg":
+            return "image/jpeg"
+        case "png":
+            return "image/png"
+        case "pdf":
+            return "application/pdf"
+        default:
+            return "application/octet-stream"
+        }
+    }
+    
+    private func getCurrentUserId() async throws -> UUID? {
+        // Get user ID from Supabase auth
+        return supabase.auth.currentUser?.id
+    }
+    
+    private func showAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
     
     // MARK: - Success Animation
@@ -466,7 +734,13 @@ class PostJobViewController: UIViewController {
     private func setupBottomButtons() {
         let container = UIView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        container.backgroundColor = .systemGroupedBackground
+        container.backgroundColor = .secondarySystemGroupedBackground
+        
+        // Add top border
+        let topBorder = UIView()
+        topBorder.backgroundColor = .separator
+        topBorder.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(topBorder)
 
         let stack = UIStackView(arrangedSubviews: [cancelButton, assignTaskButton])
         stack.axis = .horizontal
@@ -478,6 +752,11 @@ class PostJobViewController: UIViewController {
         view.addSubview(container)
 
         NSLayoutConstraint.activate([
+            topBorder.topAnchor.constraint(equalTo: container.topAnchor),
+            topBorder.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            topBorder.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            topBorder.heightAnchor.constraint(equalToConstant: 0.5),
+            
             container.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             container.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
@@ -493,6 +772,152 @@ class PostJobViewController: UIViewController {
     @objc private func backTapped() {
         navigationController?.popViewController(animated: true)
     }
+    
+    // MARK: - Fetch Saved Casting Profile
+    private func fetchSavedCastingProfile() async {
+        guard let userId = supabase.auth.currentUser?.id else {
+            print("❌ User not authenticated")
+            return
+        }
+        
+        do {
+            let response = try await supabase
+                .from("casting_profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+            
+            let castingProfile = try JSONDecoder().decode(CastingProfileRecord.self, from: response.data)
+            await MainActor.run {
+                self.savedCastingProfile = castingProfile
+                self.updateFormWithSavedProfile(castingProfile)
+            }
+            print("✅ Loaded saved casting profile: \(castingProfile.companyName ?? "N/A")")
+        } catch {
+            print("ℹ️ No saved casting profile found or error loading: \(error)")
+        }
+    }
+    
+    // MARK: - Update Form with Saved Profile
+    private func updateFormWithSavedProfile(_ profile: CastingProfileRecord) {
+        // Add a profile summary card at the top of the form
+        if let summaryCard = createProfileSummaryCard(profile) {
+            formStack.insertArrangedSubview(summaryCard, at: 0)
+            self.profileSummaryCard = summaryCard
+            
+            // Add a divider
+            let divider = UIView()
+            divider.backgroundColor = UIColor.systemGray5
+            divider.heightAnchor.constraint(equalToConstant: 1).isActive = true
+            formStack.insertArrangedSubview(divider, at: 1)
+        }
+    }
+    
+    // MARK: - Create Profile Summary Card
+    private func createProfileSummaryCard(_ profile: CastingProfileRecord) -> UIView? {
+        let card = UIView()
+        card.backgroundColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 0.08)
+        card.layer.cornerRadius = 12
+        card.layer.borderColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 0.2).cgColor
+        card.layer.borderWidth = 1
+        
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Header with icon and title
+        let headerStack = UIStackView()
+        headerStack.axis = .horizontal
+        headerStack.spacing = 8
+        headerStack.alignment = .center
+        
+        let checkIcon = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
+        checkIcon.tintColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1)
+        checkIcon.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        checkIcon.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        
+        let titleLabel = UILabel()
+        titleLabel.text = "Profile Information"
+        titleLabel.font = UIFont.boldSystemFont(ofSize: 16)
+        titleLabel.textColor = UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1)
+        
+        headerStack.addArrangedSubview(checkIcon)
+        headerStack.addArrangedSubview(titleLabel)
+        headerStack.addArrangedSubview(UIView()) // Spacer
+        
+        // Edit button
+        let editButton = UIButton(type: .system)
+        editButton.setTitle("Change", for: .normal)
+        editButton.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
+        editButton.setTitleColor(UIColor(red: 67/255, green: 0/255, blue: 34/255, alpha: 1), for: .normal)
+        editButton.addTarget(self, action: #selector(changeProfileTapped), for: .touchUpInside)
+        headerStack.addArrangedSubview(editButton)
+        
+        stack.addArrangedSubview(headerStack)
+        
+        // Profile details
+        let detailsStack = UIStackView()
+        detailsStack.axis = .vertical
+        detailsStack.spacing = 8
+        
+        // Company name
+        if let companyName = profile.companyName, !companyName.isEmpty {
+            let companyLabel = UILabel()
+            companyLabel.text = "Company: \(companyName)"
+            companyLabel.font = UIFont.systemFont(ofSize: 13)
+            companyLabel.textColor = .darkGray
+            detailsStack.addArrangedSubview(companyLabel)
+        }
+        
+        // Specific role / Professional title
+        if let role = profile.specificRole, !role.isEmpty {
+            let roleLabel = UILabel()
+            roleLabel.text = "Role: \(role)"
+            roleLabel.font = UIFont.systemFont(ofSize: 13)
+            roleLabel.textColor = .darkGray
+            detailsStack.addArrangedSubview(roleLabel)
+        }
+        
+        // Casting types / Specializations
+        if !profile.castingTypes.isEmpty {
+            let typesLabel = UILabel()
+            typesLabel.text = "Specializations: \(profile.castingTypes.joined(separator: ", "))"
+            typesLabel.font = UIFont.systemFont(ofSize: 13)
+            typesLabel.textColor = .darkGray
+            typesLabel.numberOfLines = 0
+            detailsStack.addArrangedSubview(typesLabel)
+        }
+        
+        stack.addArrangedSubview(detailsStack)
+        
+        card.addSubview(stack)
+        
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12)
+        ])
+        
+        card.heightAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
+        
+        return card
+    }
+    
+    // MARK: - Change Profile Action
+    @objc private func changeProfileTapped() {
+        // Check if ProfileInfoViewController is already in the navigation stack
+        if let profileVC = navigationController?.viewControllers.first(where: { $0 is ProfileInfoViewController }) {
+            // Pop back to it
+            navigationController?.popToViewController(profileVC, animated: true)
+        } else {
+            // Push a new ProfileInfoViewController
+            let profileVC = ProfileInfoViewController()
+            navigationController?.pushViewController(profileVC, animated: true)
+        }
+    }
 }
 
 // MARK: - PHPickerViewControllerDelegate
@@ -504,18 +929,41 @@ extension PostJobViewController: PHPickerViewControllerDelegate {
         
         result.itemProvider.loadFileRepresentation(forTypeIdentifier: "public.movie") { [weak self] url, error in
             if let url = url {
-                DispatchQueue.main.async {
-                    self?.uploadedFileURL = url
-                    self?.uploadedFileName?.text = url.lastPathComponent
-                    self?.uploadedFileName?.textColor = .appPurple
+                // Copy to app's temporary directory to prevent file from being cleaned up
+                let tempDirectory = FileManager.default.temporaryDirectory
+                let fileName = url.lastPathComponent
+                let destinationURL = tempDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension(fileName)
+                
+                do {
+                    // Copy the file
+                    try FileManager.default.copyItem(at: url, to: destinationURL)
+                    
+                    DispatchQueue.main.async {
+                        self?.uploadedFileURL = destinationURL
+                        self?.uploadedFileName?.text = fileName
+                        self?.uploadedFileName?.textColor = .appPurple
+                    }
+                } catch {
+                    print("❌ Error copying video file: \(error)")
                 }
             } else {
                 result.itemProvider.loadFileRepresentation(forTypeIdentifier: "public.image") { [weak self] url, error in
                     if let url = url {
-                        DispatchQueue.main.async {
-                            self?.uploadedFileURL = url
-                            self?.uploadedFileName?.text = url.lastPathComponent
-                            self?.uploadedFileName?.textColor = .appPurple
+                        // Copy to app's temporary directory
+                        let tempDirectory = FileManager.default.temporaryDirectory
+                        let fileName = url.lastPathComponent
+                        let destinationURL = tempDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension(fileName)
+                        
+                        do {
+                            try FileManager.default.copyItem(at: url, to: destinationURL)
+                            
+                            DispatchQueue.main.async {
+                                self?.uploadedFileURL = destinationURL
+                                self?.uploadedFileName?.text = fileName
+                                self?.uploadedFileName?.textColor = .appPurple
+                            }
+                        } catch {
+                            print("❌ Error copying image file: \(error)")
                         }
                     }
                 }
@@ -529,9 +977,54 @@ extension PostJobViewController: UIDocumentPickerDelegate {
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
         
-        uploadedFileURL = url
-        uploadedFileName?.text = url.lastPathComponent
-        uploadedFileName?.textColor = .appPurple
+        // Start accessing security-scoped resource for documents
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        // Copy to app's temporary directory
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileName = url.lastPathComponent
+        let destinationURL = tempDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension(fileName)
+        
+        do {
+            try FileManager.default.copyItem(at: url, to: destinationURL)
+            uploadedFileURL = destinationURL
+            uploadedFileName?.text = fileName
+            uploadedFileName?.textColor = .appPurple
+        } catch {
+            print("❌ Error copying document file: \(error)")
+        }
+    }
+}
+
+// MARK: - UITextViewDelegate
+extension PostJobViewController: UITextViewDelegate {
+    func textViewDidBeginEditing(_ textView: UITextView) {
+        // Clear placeholder text
+        if textView.textColor == .placeholderText {
+            textView.text = ""
+            textView.textColor = .label
+        }
+    }
+    
+    func textViewDidEndEditing(_ textView: UITextView) {
+        // Restore placeholder if empty
+        if textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if textView == taskDescriptionTextView {
+                textView.text = "Describe what the actor needs..."
+            } else if textView == characterDescriptionTextView {
+                textView.text = "Describe the character..."
+            } else if textView == personalityTraitsTextView {
+                textView.text = "e.g., confident, emotional"
+            } else if textView == settingDescriptionTextView {
+                textView.text = "Describe the setting"
+            }
+            textView.textColor = .placeholderText
+        }
     }
 }
 
@@ -630,7 +1123,7 @@ extension PostJobViewController {
     private func createSectionHeader(_ text: String) -> UILabel {
         let lbl = UILabel()
         lbl.text = text
-        lbl.font = .systemFont(ofSize: 13, weight: .semibold)
+        lbl.font = .systemFont(ofSize: 13, weight: .regular)
         lbl.textColor = .secondaryLabel
         return lbl
     }
@@ -638,22 +1131,22 @@ extension PostJobViewController {
     private func createCardContainer(_ content: (UIStackView) -> Void) -> UIView {
         let card = UIView()
         card.backgroundColor = .secondarySystemGroupedBackground
-        card.layer.cornerRadius = 14
+        card.layer.cornerRadius = 10
         card.translatesAutoresizingMaskIntoConstraints = false
 
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 20
+        stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         content(stack)
 
         card.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 20),
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
             stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
             stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
-            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -20)
+            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12)
         ])
 
         return card
@@ -662,7 +1155,8 @@ extension PostJobViewController {
     private func createFieldTitle(_ text: String) -> UILabel {
         let lbl = UILabel()
         lbl.text = text
-        lbl.font = .systemFont(ofSize: 15, weight: .regular)
+        lbl.font = .systemFont(ofSize: 17, weight: .regular)
+        lbl.textColor = .label
         return lbl
     }
 
@@ -676,13 +1170,27 @@ extension PostJobViewController {
     private func createTextField(title: String, placeholder: String) -> UIView {
         let container = UIStackView()
         container.axis = .vertical
-        container.spacing = 6
+        container.spacing = 8
 
         let titleLabel = createFieldTitle(title)
 
         let field = UITextField()
         field.placeholder = placeholder
-        field.font = .systemFont(ofSize: 16)
+        field.font = .systemFont(ofSize: 17)
+        field.textColor = .label
+        
+        // Store reference based on title for form extraction
+        if title == "Task Title" {
+            taskTitleTextField = field
+        } else if title == "Character Name" {
+            characterNameTextField = field
+        } else if title == "Age" {
+            characterAgeTextField = field
+        } else if title == "Scene Title" {
+            sceneTitleTextField = field
+        } else if title == "Expected Duration" {
+            expectedDurationTextField = field
+        }
 
         container.addArrangedSubview(titleLabel)
         container.addArrangedSubview(field)
@@ -693,16 +1201,31 @@ extension PostJobViewController {
     private func createTextView(title: String, placeholder: String) -> UIView {
         let container = UIStackView()
         container.axis = .vertical
-        container.spacing = 6
+        container.spacing = 8
 
         let titleLabel = createFieldTitle(title)
 
         let tv = UITextView()
         tv.text = placeholder
         tv.textColor = .placeholderText
-        tv.font = .systemFont(ofSize: 16)
+        tv.font = .systemFont(ofSize: 17)
         tv.isScrollEnabled = false
-        tv.heightAnchor.constraint(equalToConstant: 40).isActive = true
+        tv.heightAnchor.constraint(greaterThanOrEqualToConstant: 60).isActive = true
+        tv.backgroundColor = .clear
+        tv.textContainerInset = .zero
+        tv.textContainer.lineFragmentPadding = 0
+        tv.delegate = self
+        
+        // Store reference based on title for form extraction
+        if title == "Description" {
+            taskDescriptionTextView = tv
+        } else if title == "Character Description" {
+            characterDescriptionTextView = tv
+        } else if title == "Personality Traits" {
+            personalityTraitsTextView = tv
+        } else if title == "Setting Description" {
+            settingDescriptionTextView = tv
+        }
 
         container.addArrangedSubview(titleLabel)
         container.addArrangedSubview(tv)
@@ -713,17 +1236,19 @@ extension PostJobViewController {
     private func createDateField(title: String, placeholder: String, datePicker: UIDatePicker, textField: inout UITextField?) -> UIView {
         let container = UIStackView()
         container.axis = .vertical
-        container.spacing = 6
+        container.spacing = 8
 
         let titleLabel = createFieldTitle(title)
 
         let fieldStack = UIStackView()
         fieldStack.axis = .horizontal
         fieldStack.alignment = .center
+        fieldStack.spacing = 8
 
         let field = UITextField()
         field.placeholder = placeholder
-        field.font = .systemFont(ofSize: 16)
+        field.font = .systemFont(ofSize: 17)
+        field.textColor = .label
         field.inputView = datePicker
         
         // Create toolbar with Done button
@@ -752,23 +1277,27 @@ extension PostJobViewController {
     private func createDropdown(title: String, placeholder: String, label: inout UILabel?) -> UIView {
         let container = UIStackView()
         container.axis = .vertical
-        container.spacing = 6
+        container.spacing = 8
 
         let titleLabel = createFieldTitle(title)
 
         let stack = UIStackView()
         stack.axis = .horizontal
         stack.alignment = .center
+        stack.spacing = 8
 
         let genreLabel = UILabel()
         genreLabel.text = placeholder
         genreLabel.textColor = .placeholderText
-        genreLabel.font = .systemFont(ofSize: 16)
+        genreLabel.font = .systemFont(ofSize: 17)
         
         label = genreLabel
 
         let icon = UIImageView(image: UIImage(systemName: "chevron.down"))
-        icon.tintColor = .systemGray
+        icon.tintColor = .tertiaryLabel
+        icon.contentMode = .scaleAspectFit
+        icon.widthAnchor.constraint(equalToConstant: 13).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 13).isActive = true
 
         stack.addArrangedSubview(genreLabel)
         stack.addArrangedSubview(icon)
@@ -787,16 +1316,18 @@ extension PostJobViewController {
     private func createUploadField(title: String, subtitle: String, fileNameLabel: inout UILabel?) -> UIView {
         let container = UIStackView()
         container.axis = .vertical
-        container.spacing = 6
+        container.spacing = 0
 
         let fieldStack = UIStackView()
         fieldStack.axis = .horizontal
-        fieldStack.spacing = 10
+        fieldStack.spacing = 12
         fieldStack.alignment = .center
 
         let icon = UIImageView(image: UIImage(systemName: "square.and.arrow.up"))
-        icon.tintColor = .appPurple
-        icon.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        icon.tintColor = .systemBlue
+        icon.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        icon.contentMode = .scaleAspectFit
 
         let textStack = UIStackView()
         textStack.axis = .vertical
@@ -804,7 +1335,8 @@ extension PostJobViewController {
 
         let titleLabel = UILabel()
         titleLabel.text = title
-        titleLabel.font = .systemFont(ofSize: 16)
+        titleLabel.font = .systemFont(ofSize: 17)
+        titleLabel.textColor = .label
 
         let subtitleLabel = UILabel()
         subtitleLabel.text = subtitle
@@ -817,10 +1349,10 @@ extension PostJobViewController {
         textStack.addArrangedSubview(subtitleLabel)
 
         let chevron = UIImageView(image: UIImage(systemName: "chevron.right"))
-        chevron.tintColor = .appPurple
+        chevron.tintColor = .tertiaryLabel
         chevron.contentMode = .scaleAspectFit
-        chevron.widthAnchor.constraint(equalToConstant: 20).isActive = true
-        chevron.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        chevron.widthAnchor.constraint(equalToConstant: 13).isActive = true
+        chevron.heightAnchor.constraint(equalToConstant: 13).isActive = true
 
         fieldStack.addArrangedSubview(icon)
         fieldStack.addArrangedSubview(textStack)
@@ -839,7 +1371,7 @@ extension PostJobViewController {
     private func createPaymentField(title: String, placeholder: String) -> UIView {
         let container = UIStackView()
         container.axis = .vertical
-        container.spacing = 6
+        container.spacing = 8
 
         let titleLabel = createFieldTitle(title)
 
@@ -849,13 +1381,15 @@ extension PostJobViewController {
 
         let rupee = UILabel()
         rupee.text = "₹"
-        rupee.font = .systemFont(ofSize: 16)
-        rupee.textColor = .appPurple
+        rupee.font = .systemFont(ofSize: 17, weight: .medium)
+        rupee.textColor = .secondaryLabel
 
         let field = UITextField()
         field.placeholder = placeholder
-        field.font = .systemFont(ofSize: 16)
+        field.font = .systemFont(ofSize: 17)
+        field.textColor = .label
         field.keyboardType = .numberPad
+        paymentAmountTextField = field
         
         // Create toolbar with Done button for number pad
         let toolbar = UIToolbar()

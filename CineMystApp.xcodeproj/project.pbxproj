@@ -169,6 +169,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JUNF53WL4F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CineMystApp/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "CineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs to access your camera";
@@ -199,6 +200,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JUNF53WL4F;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CineMystApp/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "CineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs to access your camera";

@@ -2,6 +2,9 @@ import UIKit
 
 class JobDetailsViewController: UIViewController {
     
+    // MARK: - Properties
+    var job: Job?
+    
     // UI
     private let scrollView = UIScrollView()
     private let contentView = UIView()
@@ -26,6 +29,7 @@ class JobDetailsViewController: UIViewController {
    }()
     @objc private func applyTapped() {
         let vc = ApplicationStartedViewController()
+        vc.job = job // Pass job data
         navigationController?.pushViewController(vc, animated: true)
     }
 
@@ -35,22 +39,17 @@ class JobDetailsViewController: UIViewController {
         
         setupScrollView()
         setupLayout()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        
+        // Hide tab bar
+        tabBarController?.tabBar.isHidden = true
+        
+        // Rebuild content when view appears to ensure job data is available
         buildContentCards()
     }
-    override func viewWillAppear(_ animated: Bool) {
-            super.viewWillAppear(animated)
-
-            // Hide tab bar only
-            tabBarController?.tabBar.isHidden = true
-
-            // If you also have a floating button on your custom TabBarController,
-            // you'll need to hide/show it here as well. Example:
-            // (Assuming your tabBar controller has a `floatingButton` property)
-            //
-            // if let tb = tabBarController as? CineMystTabBarController {
-            //     tb.setFloatingButton(hidden: true)
-            // }
-        }
     override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
 
@@ -107,6 +106,23 @@ extension JobDetailsViewController {
     
     // Build the Cards Section
     private func buildContentCards() {
+        // Debug: Check if job data is available
+        if let job = job {
+            print("📋 JobDetailsViewController - Job data available:")
+            print("   Title: \(job.title)")
+            print("   Description: \(job.description ?? "nil")")
+            print("   Requirements: \(job.requirements ?? "nil")")
+            print("   Rate: ₹\(job.ratePerDay)/day")
+        } else {
+            print("⚠️ JobDetailsViewController - No job data available, using fallback")
+        }
+        
+        // Remove existing card stack if it exists
+        contentView.subviews.forEach { subview in
+            if subview is UIStackView && subview != titleLabel && subview != applyButton {
+                subview.removeFromSuperview()
+            }
+        }
         
         let cardStack = UIStackView()
         cardStack.axis = .vertical
@@ -122,25 +138,59 @@ extension JobDetailsViewController {
             cardStack.bottomAnchor.constraint(equalTo: applyButton.topAnchor, constant: -40)
         ])
         
-        // Create cards exactly matching your UI
-        cardStack.addArrangedSubview(makeCard(
-            title: "Lead Role in Indie Film",
-            body: """
+        // Display job data if available
+        if let job = job {
+            // Job Title and Description
+            cardStack.addArrangedSubview(makeCard(
+                title: job.title,
+                body: job.description ?? "No description available."
+            ))
+            
+            // Requirements
+            if let requirements = job.requirements, !requirements.isEmpty {
+                cardStack.addArrangedSubview(makeRequirementsCard(requirements: requirements))
+            }
+            
+            // Compensation
+            cardStack.addArrangedSubview(makeCard(
+                title: "Compensation",
+                body: "₹\(job.ratePerDay)/day"
+            ))
+            
+            // Deadline
+            let deadlineText: String
+            if let deadline = job.applicationDeadline {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                deadlineText = "Applications must be received by \(formatter.string(from: deadline))."
+            } else {
+                deadlineText = "No deadline specified."
+            }
+            cardStack.addArrangedSubview(makeCard(
+                title: "Deadline",
+                body: deadlineText
+            ))
+        } else {
+            // Fallback to placeholder data
+            cardStack.addArrangedSubview(makeCard(
+                title: "Lead Role in Indie Film",
+                body: """
 Seeking a versatile actor for the lead role in an upcoming independent film. The project explores themes of identity and belonging, set against the backdrop of a bustling city. The role requires a nuanced performance, capable of conveying a wide range of emotions.
 """
-        ))
-        
-        cardStack.addArrangedSubview(makeRequirementsCard())
-        
-        cardStack.addArrangedSubview(makeCard(
-            title: "Compensation",
-            body: "Paid role; compensation details will be discussed upon application."
-        ))
-        
-        cardStack.addArrangedSubview(makeCard(
-            title: "Deadline",
-            body: "Applications must be received by July 15, 2024."
-        ))
+            ))
+            
+            cardStack.addArrangedSubview(makeRequirementsCard(requirements: ""))
+            
+            cardStack.addArrangedSubview(makeCard(
+                title: "Compensation",
+                body: "Paid role; compensation details will be discussed upon application."
+            ))
+            
+            cardStack.addArrangedSubview(makeCard(
+                title: "Deadline",
+                body: "Applications must be received by July 15, 2024."
+            ))
+        }
         
         // Bottom apply button constraints
         NSLayoutConstraint.activate([
@@ -189,7 +239,7 @@ Seeking a versatile actor for the lead role in an upcoming independent film. The
     }
     
     // Requirements Card (Custom Layout)
-    private func makeRequirementsCard() -> UIView {
+    private func makeRequirementsCard(requirements: String) -> UIView {
         let card = UIView()
         card.backgroundColor = .white
         card.layer.cornerRadius = 16
@@ -216,7 +266,13 @@ Seeking a versatile actor for the lead role in an upcoming independent film. The
         let expTitle = makeSmallSectionTitle("EXPERIENCE")
         
         let expBody = UILabel()
-        expBody.text = "3+ years in film or theatre\nOpen to all types"
+        if !requirements.isEmpty {
+            // Parse requirements if they contain structured data
+            // For now, display as-is
+            expBody.text = requirements
+        } else {
+            expBody.text = "3+ years in film or theatre\nOpen to all types"
+        }
         expBody.numberOfLines = 0
         expBody.font = UIFont.systemFont(ofSize: 15)
         expBody.textColor = .darkGray

@@ -1,7 +1,8 @@
 import UIKit
+import Supabase
 
 // MARK: - Models
-struct Application {
+struct ApplicationCard {
     let id: String
     let name: String
     let location: String
@@ -15,9 +16,16 @@ struct Application {
 class ApplicationsViewController: UIViewController {
     
     // MARK: - Properties
-    private var applications: [Application] = []
-    private var filteredApplications: [Application] = []
+    var job: Job?
+    private var applications: [ApplicationCard] = []
+    private var filteredApplications: [ApplicationCard] = []
     private var isFilteredByAI = false
+    // Raw data for debug/info display
+    private var dbApplicationsRaw: [Application] = []
+    private var taskSubmissionsMap: [UUID: [TaskSubmission]] = [:]
+    
+    // Use shared authenticated supabase client from Supabase.swift
+    // Local instance was causing RLS policy violations (error 42501)
     
     private let scrollView: UIScrollView = {
         let sv = UIScrollView()
@@ -139,7 +147,7 @@ class ApplicationsViewController: UIViewController {
         super.viewDidLoad()
         setupNavigationBar()
         setupUI()
-        setupData()
+        loadApplicationsForJob()
         setupActions()
     }
     
@@ -148,6 +156,9 @@ class ApplicationsViewController: UIViewController {
     private func setupNavigationBar() {
         navigationController?.navigationBar.prefersLargeTitles = true
         title = "Applications"
+        if let jobTitle = job?.title {
+            subtitleLabel.text = jobTitle
+        }
         
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
@@ -163,9 +174,19 @@ class ApplicationsViewController: UIViewController {
         let profileBtn = UIBarButtonItem(image: UIImage(systemName: "person.circle"), style: .plain, target: self, action: #selector(profileTapped))
         profileBtn.tintColor = .darkGray
         navigationItem.rightBarButtonItem = profileBtn
+        
+        let backBtn = UIBarButtonItem(image: UIImage(systemName: "chevron.left"), style: .plain, target: self, action: #selector(backTapped))
+        backBtn.tintColor = .darkGray
+        navigationItem.leftBarButtonItem = backBtn
     }
+    
+    @objc private func backTapped() {
+        navigationController?.popViewController(animated: true)
+    }
+    
     @objc private func profileTapped() {
         let vc = ShortlistedViewController()
+        vc.job = job
         navigationController?.pushViewController(vc, animated: true)
     }
 
@@ -248,16 +269,89 @@ class ApplicationsViewController: UIViewController {
         ])
     }
     
-    private func setupData() {
-        applications = [
-            Application(id: "1", name: "Aisha Sharma", location: "Mumbai, India", timeAgo: "21 days ago", profileImage: "cand3", isConnected: false, hasSubmittedTask: true, isShortlisted: false),
-            Application(id: "2", name: "Aisha Sharma", location: "Mumbai, India", timeAgo: "21 days ago", profileImage: "cand3", isConnected: true, hasSubmittedTask: true, isShortlisted: false),
-            Application(id: "3", name: "Aisha Sharma", location: "Mumbai, India", timeAgo: "21 days ago", profileImage: "cand3", isConnected: false, hasSubmittedTask: true, isShortlisted: false),
-            Application(id: "4", name: "Aisha Sharma", location: "Mumbai, India", timeAgo: "21 days ago", profileImage: "cand3", isConnected: true, hasSubmittedTask: true, isShortlisted: false),
-            Application(id: "5", name: "Aisha Sharma", location: "Mumbai, India", timeAgo: "21 days ago", profileImage: "cand3", isConnected: false, hasSubmittedTask: false, isShortlisted: false)
-        ]
-        filteredApplications = applications
-        tableView.reloadData()
+    private func loadApplicationsForJob() {
+        Task {
+            do {
+                guard let job = job else {
+                    print("❌ No job provided to ApplicationsViewController")
+                    return
+                }
+                
+                print("🔍 Loading applications for job:")
+                print("  - Job ID: \(job.id.uuidString)")
+                print("  - Job Title: \(job.title)")
+                
+                // Fetch applications for this job
+                let dbApplications: [Application] = try await supabase
+                    .from("applications")
+                    .select()
+                    .eq("job_id", value: job.id.uuidString)
+                    .execute()
+                    .value
+                
+                print("  - Applications found: \(dbApplications.count)")
+                for (idx, app) in dbApplications.enumerated() {
+                    print("    [\(idx+1)] App ID: \(app.id.uuidString), Actor: \(app.actorId.uuidString), Status: \(app.status)")
+                }
+                
+                self.dbApplicationsRaw = dbApplications
+                self.taskSubmissionsMap.removeAll()
+                
+                // Fetch submissions for each application
+                for app in dbApplications {
+                    do {
+                        let subs: [TaskSubmission] = try await supabase
+                            .from("task_submissions")
+                            .select()
+                            .eq("application_id", value: app.id.uuidString)
+                            .order("submitted_at", ascending: false)
+                            .execute()
+                            .value
+                        self.taskSubmissionsMap[app.id] = subs
+                    } catch {
+                        print("⚠️ Could not fetch submissions for app \(app.id): \(error)")
+                    }
+                }
+                
+                // Convert to ApplicationCard
+                self.applications = dbApplications.map { app in
+                    ApplicationCard(
+                        id: app.id.uuidString,
+                        name: "Applicant \(app.id.uuidString.prefix(8))",
+                        location: "India",
+                        timeAgo: self.timeAgoString(from: app.appliedAt),
+                        profileImage: "avatar_placeholder",
+                        isConnected: false,
+                        hasSubmittedTask: app.status == .taskSubmitted || app.status == .selected || app.status == .shortlisted,
+                        isShortlisted: app.status == .shortlisted || app.status == .selected
+                    )
+                }
+                
+                self.filteredApplications = self.applications
+                
+                DispatchQueue.main.async {
+                    self.countLabel.text = "\(self.applications.count) applications"
+                    self.tableView.reloadData()
+                    print("✅ Applications loaded and displayed: \(self.applications.count)")
+                }
+            } catch {
+                print("❌ Error loading applications: \(error)")
+            }
+        }
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.day, .hour, .minute], from: date, to: now)
+        
+        if let days = components.day, days > 0 {
+            return "\(days) day\(days > 1 ? "s" : "") ago"
+        } else if let hours = components.hour, hours > 0 {
+            return "\(hours) hour\(hours > 1 ? "s" : "") ago"
+        } else {
+            return "just now"
+        }
     }
     
     private func setupActions() {
@@ -268,7 +362,23 @@ class ApplicationsViewController: UIViewController {
     
     // MARK: - Actions
     
-   
+    @objc private func showAppData() {
+    guard let job = job else { return }
+    var lines: [String] = []
+    lines.append("Job: \(job.title) (\(job.id.uuidString))")
+    lines.append("Applications: \(dbApplicationsRaw.count)")
+    for app in dbApplicationsRaw {
+    let status = app.status.rawValue
+    let subs = taskSubmissionsMap[app.id] ?? []
+    let latestURL = subs.first?.submissionUrl ?? "-"
+    lines.append("• App \(app.id.uuidString.prefix(8)) status=\(status) submissions=\(subs.count) latest=\(latestURL)")
+    }
+    let message = lines.joined(separator: "\n")
+    let alert = UIAlertController(title: "Application Data", message: message, preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: "OK", style: .default))
+    present(alert, animated: true)
+    }
+    
     
     @objc private func filtersTapped() {
         showFilterMenu()
@@ -318,8 +428,8 @@ extension ApplicationsViewController: UITableViewDelegate, UITableViewDataSource
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "ApplicationCell", for: indexPath) as! ApplicationCell
-        let application = filteredApplications[indexPath.row]
-        cell.configure(with: application)
+              let application = filteredApplications[indexPath.row]  // Still works
+              cell.configure(with: application)
         cell.shortlistAction = { [weak self] in
             self?.toggleShortlist(at: indexPath)
         }
@@ -331,11 +441,166 @@ extension ApplicationsViewController: UITableViewDelegate, UITableViewDataSource
     }
     
     private func toggleShortlist(at indexPath: IndexPath) {
-        filteredApplications[indexPath.row].isShortlisted.toggle()
-        if let originalIndex = applications.firstIndex(where: { $0.id == filteredApplications[indexPath.row].id }) {
-            applications[originalIndex].isShortlisted = filteredApplications[indexPath.row].isShortlisted
+        let application = filteredApplications[indexPath.row]
+        let newShortlistStatus = !application.isShortlisted
+        
+        // Update locally
+        filteredApplications[indexPath.row].isShortlisted = newShortlistStatus
+        if let originalIndex = applications.firstIndex(where: { $0.id == application.id }) {
+            applications[originalIndex].isShortlisted = newShortlistStatus
         }
         tableView.reloadRows(at: [indexPath], with: .automatic)
+        
+        // Persist to database
+        Task {
+            await updateApplicationShortlistStatus(applicationId: application.id, isShortlisted: newShortlistStatus)
+        }
+    }
+    
+    private func updateApplicationShortlistStatus(applicationId: String, isShortlisted: Bool) async {
+        do {
+            guard let appUUID = UUID(uuidString: applicationId) else {
+                print("❌ Invalid application ID")
+                return
+            }
+            
+            // Find the raw application
+            guard let appIndex = dbApplicationsRaw.firstIndex(where: { $0.id.uuidString == applicationId }) else {
+                print("❌ Application not found in raw data")
+                return
+            }
+            
+            let app = dbApplicationsRaw[appIndex]
+            
+            print("🔄 Updating application \(applicationId.prefix(8))")
+            print("   Job ID: \(app.jobId.uuidString)")
+            print("   Current status: \(app.status.rawValue)")
+            print("   Shortlisting: \(isShortlisted)")
+            
+            // Determine new status - keep original status if unshortlisting
+            let newStatus: Application.ApplicationStatus
+            if isShortlisted {
+                newStatus = .shortlisted
+            } else {
+                // When unshortlisting, revert to appropriate status based on what was submitted
+                if let _ = app.portfolioUrl {
+                    newStatus = .portfolioSubmitted
+                } else {
+                    newStatus = .taskSubmitted
+                }
+            }
+            
+            // Create updated application
+            let updatedApp = Application(
+                id: app.id,
+                jobId: app.jobId,
+                actorId: app.actorId,
+                status: newStatus,
+                portfolioUrl: app.portfolioUrl,
+                portfolioSubmittedAt: app.portfolioSubmittedAt,
+                appliedAt: app.appliedAt,
+                updatedAt: Date()
+            )
+            
+            // Update in database
+            let _: Application = try await supabase
+                .from("applications")
+                .update(updatedApp)
+                .eq("id", value: applicationId)
+                .single()
+                .execute()
+                .value
+            
+            // Update local cache
+            dbApplicationsRaw[appIndex] = updatedApp
+            
+            print("✅ Application \(applicationId.prefix(8)) shortlist status updated to: \(isShortlisted), new status: \(newStatus.rawValue)")
+            
+            // If shortlisting, update job status to pending
+            if isShortlisted {
+                print("📤 Calling updateJobStatusToPending for job: \(app.jobId.uuidString)")
+                await updateJobStatusToPending(jobId: app.jobId)
+            }
+        } catch {
+            print("❌ Error updating shortlist status: \(error)")
+        }
+    }
+    
+    private func updateJobStatusToPending(jobId: UUID) async {
+        do {
+            print("📥 Fetching current job status for: \(jobId.uuidString)")
+            
+            // Debug: Check authenticated user
+            if let currentUser = supabase.auth.currentUser {
+                print("🔐 Authenticated user ID: \(currentUser.id.uuidString)")
+            } else {
+                print("⚠️ No authenticated user found!")
+            }
+            
+            // Fetch the current job from database to get latest status
+            let currentJob: Job = try await supabase
+                .from("jobs")
+                .select()
+                .eq("id", value: jobId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            print("📋 Current job status: '\(currentJob.status.rawValue)'")
+            print("   Job title: \(currentJob.title)")
+            print("   Job director_id: \(currentJob.directorId.uuidString)")
+            print("   Is active? \(currentJob.status == .active)")
+            
+            // Only update if job is currently active
+            if currentJob.status == .active {
+                print("🔄 Updating job from active to pending...")
+                
+                // Use raw SQL update via Supabase RPC as workaround for RLS
+                struct UpdateJobStatusParams: Encodable {
+                    let job_id: String
+                    let new_status: String
+                }
+                
+                let params = UpdateJobStatusParams(
+                    job_id: jobId.uuidString,
+                    new_status: "pending"
+                )
+                
+                // Try direct update first
+                do {
+                    try await supabase.rpc("update_job_status", params: params).execute()
+                    print("✅ Job \(jobId.uuidString.prefix(8)) status updated via RPC")
+                } catch {
+                    print("⚠️ RPC failed, trying direct update: \(error)")
+                    
+                    // Fallback to direct update with minimal payload
+                    struct JobStatusUpdate: Encodable {
+                        let status: String
+                        let updated_at: String
+                    }
+                    
+                    let update = JobStatusUpdate(
+                        status: "pending",
+                        updated_at: ISO8601DateFormatter().string(from: Date())
+                    )
+                    
+                    try await supabase
+                        .from("jobs")
+                        .update(update)
+                        .eq("id", value: jobId.uuidString)
+                        .execute()
+                    
+                    print("✅ Job \(jobId.uuidString.prefix(8)) status updated via direct UPDATE")
+                }
+            } else {
+                print("ℹ️ Job \(jobId.uuidString.prefix(8)) already has status: '\(currentJob.status.rawValue)', not updating")
+            }
+        } catch {
+            print("❌ Error updating job status: \(error)")
+            print("   Error details: \(String(describing: error))")
+            print("⚠️ NOTE: This is likely a Supabase RLS policy issue.")
+            print("   The application was shortlisted successfully.")
+        }
     }
 }
 import UIKit
@@ -582,7 +847,7 @@ class ApplicationCell: UITableViewCell {
     
     // MARK: Configure
     
-    func configure(with application: Application) {
+    func configure(with application: ApplicationCard) {
         nameLabel.text = application.name
         locationLabel.text = application.location
         timeLabel.text = application.timeAgo

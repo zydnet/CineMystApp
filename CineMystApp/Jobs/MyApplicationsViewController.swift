@@ -1,6 +1,16 @@
 import UIKit
+import Supabase
 
 class MyApplicationsViewController: UIViewController {
+
+    // MARK: - Properties
+    private let supabase = SupabaseClient(
+        supabaseURL: URL(string: "https://kyhyunyobgouumgwcigk.supabase.co")!,
+        supabaseKey: "sb_publishable_oJe1X9aiPdKm6wqR1zvFhA_aIiej9-d"
+    )
+    
+    private var applications: [Application] = []
+    private var jobs: [Job] = []
 
     // MARK: - UI Components
     private let scrollView = UIScrollView()
@@ -49,22 +59,14 @@ class MyApplicationsViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemGroupedBackground
         setupLayout()
-        loadCardsFor(segment: 0)
+        loadApplications()
     }
+    
     override func viewWillAppear(_ animated: Bool) {
-            super.viewWillAppear(animated)
-
-            // Hide tab bar only
-            tabBarController?.tabBar.isHidden = true
-
-            // If you also have a floating button on your custom TabBarController,
-            // you'll need to hide/show it here as well. Example:
-            // (Assuming your tabBar controller has a `floatingButton` property)
-            //
-            // if let tb = tabBarController as? CineMystTabBarController {
-            //     tb.setFloatingButton(hidden: true)
-            // }
-        }
+        super.viewWillAppear(animated)
+        tabBarController?.tabBar.isHidden = true
+        loadApplications()
+    }
     override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
 
@@ -128,7 +130,40 @@ class MyApplicationsViewController: UIViewController {
         loadCardsFor(segment: segmentedControl.selectedSegmentIndex)
     }
 
-    // MARK: - Load Cards
+    // MARK: - Load Applications
+    private func loadApplications() {
+        Task {
+            do {
+                guard let currentUser = supabase.auth.currentUser else {
+                    return
+                }
+                
+                let actorId = currentUser.id.uuidString
+                
+                // Fetch applications for current user
+                applications = try await supabase
+                    .from("applications")
+                    .select()
+                    .eq("actor_id", value: actorId)
+                    .execute()
+                    .value
+                
+                // Fetch all jobs
+                jobs = try await supabase
+                    .from("jobs")
+                    .select()
+                    .execute()
+                    .value
+                
+                // Load first segment
+                loadCardsFor(segment: 0)
+            } catch {
+                print("Error loading applications: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Load Cards by Status
     private func loadCardsFor(segment: Int) {
         stackView.arrangedSubviews.forEach { $0.removeFromSuperview() }
         
@@ -140,23 +175,90 @@ class MyApplicationsViewController: UIViewController {
         }
     }
 
-    // MARK: - Cards Data
+    // MARK: - Cards by Status
     private func loadActiveCards() {
-        for _ in 0..<3 {
-            stackView.addArrangedSubview(makeJobCard(statusButtonTitle: "View Task", statusColor: UIColor(red: 67/255, green: 0, blue: 34/255, alpha: 1)))
+        let activeApps = applications.filter { $0.status == .portfolioSubmitted }
+        
+        if activeApps.isEmpty {
+            let emptyLabel = UILabel()
+            emptyLabel.text = "No active applications"
+            emptyLabel.textColor = .gray
+            emptyLabel.textAlignment = .center
+            emptyLabel.font = .systemFont(ofSize: 14)
+            stackView.addArrangedSubview(emptyLabel)
+            return
+        }
+        
+        for app in activeApps {
+            if let job = jobs.first(where: { $0.id == app.jobId }) {
+                stackView.addArrangedSubview(
+                    makeJobCard(
+                        job: job,
+                        application: app,
+                        statusButtonTitle: "Go to Task",
+                        statusColor: UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
+                    )
+                )
+            }
         }
     }
     
     private func loadPendingCards() {
-        stackView.addArrangedSubview(makeJobCard(statusButtonTitle: "Submitted", statusColor: .gray))
+        let pendingApps = applications.filter { $0.status == .taskSubmitted }
+        
+        if pendingApps.isEmpty {
+            let emptyLabel = UILabel()
+            emptyLabel.text = "No pending applications"
+            emptyLabel.textColor = .gray
+            emptyLabel.textAlignment = .center
+            emptyLabel.font = .systemFont(ofSize: 14)
+            stackView.addArrangedSubview(emptyLabel)
+            return
+        }
+        
+        for app in pendingApps {
+            if let job = jobs.first(where: { $0.id == app.jobId }) {
+                stackView.addArrangedSubview(
+                    makeJobCard(
+                        job: job,
+                        application: app,
+                        statusButtonTitle: "Under Review",
+                        statusColor: .systemOrange
+                    )
+                )
+            }
+        }
     }
     
     private func loadCompletedCards() {
-        stackView.addArrangedSubview(makeJobCard(statusButtonTitle: "Booked", statusColor: .systemGreen))
+        let completedApps = applications.filter { $0.status == .selected }
+        
+        if completedApps.isEmpty {
+            let emptyLabel = UILabel()
+            emptyLabel.text = "No completed applications"
+            emptyLabel.textColor = .gray
+            emptyLabel.textAlignment = .center
+            emptyLabel.font = .systemFont(ofSize: 14)
+            stackView.addArrangedSubview(emptyLabel)
+            return
+        }
+        
+        for app in completedApps {
+            if let job = jobs.first(where: { $0.id == app.jobId }) {
+                stackView.addArrangedSubview(
+                    makeJobCard(
+                        job: job,
+                        application: app,
+                        statusButtonTitle: "Booked",
+                        statusColor: .systemGreen
+                    )
+                )
+            }
+        }
     }
 
     // MARK: - Card View Builder
-    private func makeJobCard(statusButtonTitle: String, statusColor: UIColor) -> UIView {
+    private func makeJobCard(job: Job, application: Application, statusButtonTitle: String, statusColor: UIColor) -> UIView {
         
         let card = UIView()
         card.backgroundColor = .white
@@ -167,12 +269,12 @@ class MyApplicationsViewController: UIViewController {
         card.layer.shadowRadius = 6
         
         let title = UILabel()
-        title.text = "Lead Actor - Drama Series “City of Dreams”"
+        title.text = job.title
         title.numberOfLines = 2
         title.font = UIFont.boldSystemFont(ofSize: 16)
         
         let company = UILabel()
-        company.text = "YRF Casting"
+        company.text = job.companyName
         company.font = UIFont.systemFont(ofSize: 14)
         company.textColor = .gray
         
@@ -181,19 +283,18 @@ class MyApplicationsViewController: UIViewController {
         locationIcon.widthAnchor.constraint(equalToConstant: 16).isActive = true
         
         let locationLabel = UILabel()
-        locationLabel.text = "Mumbai, India"
+        locationLabel.text = job.location
         locationLabel.font = UIFont.systemFont(ofSize: 14)
         
-        
         let payLabel = UILabel()
-        payLabel.text = "₹ 5k/day"
+        payLabel.text = "₹\(job.ratePerDay)/day"
         payLabel.font = UIFont.systemFont(ofSize: 14)
 
-        let tag1 = makeTag("Series Regular")
-        let tag2 = makeTag("Under Review")
+        let tag1 = makeTag(job.jobType)
+        let statusTag = makeTag(application.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
 
         let appliedLabel = UILabel()
-        appliedLabel.text = "Applied 3 days ago"
+        appliedLabel.text = "Applied \(timeAgoString(from: application.appliedAt))"
         appliedLabel.font = UIFont.systemFont(ofSize: 13)
         appliedLabel.textColor = .gray
         
@@ -205,7 +306,9 @@ class MyApplicationsViewController: UIViewController {
         statusButton.layer.cornerRadius = 10
         statusButton.contentEdgeInsets = UIEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
         
-        statusButton.addTarget(self, action: #selector(viewTaskTapped), for: .touchUpInside)
+        // Store application ID as tag string using objc_setAssociatedObject
+        statusButton.accessibilityIdentifier = application.id.uuidString
+        statusButton.addTarget(self, action: #selector(statusButtonTapped(_:)), for: .touchUpInside)
 
 
         let h1 = UIStackView(arrangedSubviews: [locationIcon, locationLabel, payLabel])
@@ -213,7 +316,7 @@ class MyApplicationsViewController: UIViewController {
         h1.spacing = 6
         h1.alignment = .center
         
-        let tagsRow = UIStackView(arrangedSubviews: [tag1, tag2, UIView()])
+        let tagsRow = UIStackView(arrangedSubviews: [tag1, statusTag, UIView()])
         tagsRow.axis = .horizontal
         tagsRow.spacing = 8
         tagsRow.alignment = .center
@@ -240,9 +343,33 @@ class MyApplicationsViewController: UIViewController {
         return card
     }
     
-    @objc private func viewTaskTapped() {
-        let vc = TaskDetailsViewController()
-        navigationController?.pushViewController(vc, animated: true)
+    @objc private func statusButtonTapped(_ sender: UIButton) {
+        if segmentedControl.selectedSegmentIndex == 0 {
+            // Active section - go to task
+            let vc = TaskDetailsViewController()
+            if let appId = sender.accessibilityIdentifier,
+               let appUUID = UUID(uuidString: appId),
+               let app = applications.first(where: { $0.id == appUUID }) {
+                vc.job = jobs.first(where: { $0.id == app.jobId })
+            }
+            navigationController?.pushViewController(vc, animated: true)
+        }
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.day, .hour, .minute], from: date, to: now)
+        
+        if let days = components.day, days > 0 {
+            return "\(days) day\(days > 1 ? "s" : "") ago"
+        } else if let hours = components.hour, hours > 0 {
+            return "\(hours) hour\(hours > 1 ? "s" : "") ago"
+        } else if let minutes = components.minute, minutes > 0 {
+            return "\(minutes) minute\(minutes > 1 ? "s" : "") ago"
+        } else {
+            return "just now"
+        }
     }
 
 

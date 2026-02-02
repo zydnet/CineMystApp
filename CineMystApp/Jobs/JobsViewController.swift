@@ -1,4 +1,5 @@
 import UIKit
+import Supabase
 
 // MARK: - Colors & Helpers
 fileprivate extension UIColor {
@@ -114,9 +115,12 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         
         filterButton.addTarget(self, action: #selector(openFilter), for: .touchUpInside)
         bookmarkButton.addTarget(self, action: #selector(openSavedPosts), for: .touchUpInside)
-        
-        // Add sample job cards
-        addJobCards()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Reload job cards when view appears
+        reloadJobCards()
     }
     
     private func applyTheme() {
@@ -280,44 +284,96 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         ])
     }
     
-    // MARK: - Sample job cards (uses your JobCardView)
-    private func addJobCards() {
-        let jobs = [
-            ("Lead Actor - Drama Series City of Dreams", "YRF Casting", "Mumbai, India", "₹ 5k/day", "2 days left", "Web Series"),
-            ("Assistant Director- Feature Film", "Red Chillies Entertainment", "Delhi, India", "₹ 8k/day", "5 days left", "Feature Film"),
-            ("Background Dancer", "T-Series", "Pune, India", "₹ 3k/day", "1 day left", "Music Video"),
-            ("Camera Operator", "Balaji Motion Pictures", "Hyderabad, India", "₹ 6k/day", "3 days left", "Web Series")
-        ]
+    // MARK: - Job Cards Management
+    private func reloadJobCards() {
+        // Clear existing cards
+        jobListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         
-        for job in jobs {
-            let card = JobCardView() // <-- your existing view; keep as is
-            card.configure(
-                image: UIImage(named: "rani2"),
-                title: job.0,
-                company: job.1,
-                location: job.2,
-                salary: job.3,
-                daysLeft: job.4,
-                tag: job.5
-            )
-            
-            card.onTap = { [weak self] in
-                let vc = JobDetailsViewController()
-                self?.navigationController?.pushViewController(vc, animated: true)
-            }
-            
-            card.onApplyTap = { [weak self] in
-                let vc = ApplicationStartedViewController()
-                self?.navigationController?.pushViewController(vc, animated: true)
-            }
-            jobListStack.addArrangedSubview(card)
+        // Load new cards
+        Task { [weak self] in
+            await self?.addJobCards()
         }
     }
     
+    // MARK: - Sample job cards (uses your JobCardView)
+    private func addJobCards() async {
+        do {
+            let jobs = try await JobsService.shared.fetchActiveJobs()
+            
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                for job in jobs {
+                    let card = JobCardView()
+
+                    card.configure(
+                        image: UIImage(named: "rani2"),
+                        title: job.title,
+                        company: job.companyName,
+                        location: job.location,
+                        salary: "₹ \(job.ratePerDay)/day",
+                        daysLeft: job.daysLeftText,
+                        tag: job.jobType,
+                        appliedCount: "0 applied" // replace later with real count
+                    )
+                    
+                    // Set up card tap handler
+                    card.onTap = { [weak self] in
+                        let detailVC = JobDetailsViewController()
+                        detailVC.job = job // Pass job data
+                        self?.navigationController?.pushViewController(detailVC, animated: true)
+                    }
+
+                    self.jobListStack.addArrangedSubview(card)
+                }
+            }
+        } catch {
+            print("Error loading jobs: \(error)")
+        }
+    }
+
+
+    
     // MARK: - Actions
     @objc private func postJobTapped() {
-        let vc = ProfileInfoViewController()
-        navigationController?.pushViewController(vc, animated: true)
+        // Check if user has already filled profile information
+        Task {
+            let hasProfile = await checkIfProfileExists()
+            await MainActor.run {
+                if hasProfile {
+                    // Profile exists, go directly to PostJobViewController
+                    let vc = PostJobViewController()
+                    self.navigationController?.pushViewController(vc, animated: true)
+                } else {
+                    // No profile, show ProfileInfoViewController first
+                    let vc = ProfileInfoViewController()
+                    self.navigationController?.pushViewController(vc, animated: true)
+                }
+            }
+        }
+    }
+    
+    private func checkIfProfileExists() async -> Bool {
+        guard let userId = supabase.auth.currentUser?.id else {
+            print("❌ User not authenticated")
+            return false
+        }
+        
+        do {
+            let response = try await supabase
+                .from("casting_profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+            
+            // If we successfully got a response, profile exists
+            let profile = try JSONDecoder().decode(CastingProfileRecord.self, from: response.data)
+            print("✅ Profile exists: \(profile.companyName ?? "N/A")")
+            return true
+        } catch {
+            print("ℹ️ No profile found: \(error)")
+            return false
+        }
     }
     @objc private func myJobsTapped() {
         let vc = MyApplicationsViewController()

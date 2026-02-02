@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct JobModel {
+struct JobDisplayModel {
     let id: String
     let title: String
     let company: String

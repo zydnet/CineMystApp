@@ -3,6 +3,7 @@
 //  CineMystApp
 //
 import UIKit
+import Supabase
 
 // MARK: - Model
 struct ShortlistedCandidate {
@@ -184,7 +185,9 @@ final class ShortlistedCell: UITableViewCell {
 // MARK: - ShortlistedViewController
 final class ShortlistedViewController: UIViewController {
 
+    var job: Job?
     private var tableView = UITableView(frame: .zero, style: .plain)
+    private var candidates: [ShortlistedCandidate] = []
 
     private let subtitleLabel: UILabel = {
         let lbl = UILabel()
@@ -194,28 +197,11 @@ final class ShortlistedViewController: UIViewController {
         lbl.translatesAutoresizingMaskIntoConstraints = false
         return lbl
     }()
-
-    private let candidates: [ShortlistedCandidate] = [
-        ShortlistedCandidate(
-            name: "Aisha Sharma",
-            experience: "8 years experience",
-            location: "Mumbai, India",
-            daysAgo: "21 days ago",
-            isConnected: false,
-            isTaskSubmitted: true,
-            profileImage: UIImage(named: "cand3")
-        ),
-        ShortlistedCandidate(
-            name: "Aisha Sharma",
-            experience: "8 years experience",
-            location: "Mumbai, India",
-            daysAgo: "21 days ago",
-            isConnected: true,
-            isTaskSubmitted: true,
-            profileImage: UIImage(named: "cand3")
-        )
-    ]
-
+    
+    private let supabase = SupabaseClient(
+        supabaseURL: URL(string: "https://kyhyunyobgouumgwcigk.supabase.co")!,
+        supabaseKey: "sb_publishable_oJe1X9aiPdKm6wqR1zvFhA_aIiej9-d"
+    )
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -224,6 +210,12 @@ final class ShortlistedViewController: UIViewController {
         setupNavBar()
         setupUI()
         setupTable()
+        loadShortlistedCandidates()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        loadShortlistedCandidates() // Refresh when view appears
     }
 
 
@@ -246,6 +238,61 @@ final class ShortlistedViewController: UIViewController {
 
     @objc private func backAction() {
         navigationController?.popViewController(animated: true)
+    }
+    
+    // MARK: - Load Shortlisted
+    private func loadShortlistedCandidates() {
+        Task {
+            do {
+                guard let job = job else {
+                    print("❌ No job provided to ShortlistedViewController")
+                    return
+                }
+                
+                // Fetch shortlisted applications
+                let shortlistedApps: [Application] = try await supabase
+                    .from("applications")
+                    .select()
+                    .eq("job_id", value: job.id.uuidString)
+                    .in("status", value: ["shortlisted", "selected"])
+                    .execute()
+                    .value
+                
+                // Convert to ShortlistedCandidate
+                self.candidates = shortlistedApps.map { app in
+                    ShortlistedCandidate(
+                        name: "Applicant \(app.id.uuidString.prefix(8))",
+                        experience: "Task Submitted",
+                        location: "India",
+                        daysAgo: self.timeAgoString(from: app.appliedAt),
+                        isConnected: false,
+                        isTaskSubmitted: app.status == .taskSubmitted || app.status == .shortlisted || app.status == .selected,
+                        profileImage: UIImage(named: "avatar_placeholder")
+                    )
+                }
+                
+                DispatchQueue.main.async {
+                    self.subtitleLabel.text = "\(self.candidates.count) applications"
+                    self.tableView.reloadData()
+                }
+            } catch {
+                print("❌ Error loading shortlisted candidates: \(error)")
+            }
+        }
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.day, .hour, .minute], from: date, to: now)
+        
+        if let days = components.day, days > 0 {
+            return "\(days) day\(days > 1 ? "s" : "") ago"
+        } else if let hours = components.hour, hours > 0 {
+            return "\(hours) hour\(hours > 1 ? "s" : "") ago"
+        } else {
+            return "just now"
+        }
     }
 
 

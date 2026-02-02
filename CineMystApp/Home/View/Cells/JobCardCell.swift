@@ -117,11 +117,11 @@ final class JobCardCell: UITableViewCell {
     
     // MARK: - Configure with Model
     func configure(with job: Job) {
-        titleLabel.text = job.role
-        subtitleLabel.text = job.company
+        titleLabel.text = job.title
+        subtitleLabel.text = job.companyName
         locationLabel.text = job.location
-        payLabel.text = job.pay
-        tagLabel.text = "  \(job.tag)  "
-        logo.image = UIImage(named: job.logoName)
+        payLabel.text = "₹\(job.ratePerDay)/day"
+        tagLabel.text = "  \(job.jobType)  "
+        logo.image = UIImage(named: "jobicon") // static or mapped
     }
 }
