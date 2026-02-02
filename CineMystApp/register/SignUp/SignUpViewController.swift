@@ -113,7 +113,8 @@ class SignUpViewController: UIViewController {
 
         Task {
             do {
-                let _ = try await supabase.auth.signUp(
+                // ✅ Sign up with user metadata
+                let authResponse = try await supabase.auth.signUp(
                     email: email,
                     password: password,
                     data: [
@@ -131,7 +132,36 @@ class SignUpViewController: UIViewController {
                             message: "Please check your email to verify your account, then sign in to continue."
                         )
                     } else {
-                        self.navigateToOnboarding(username: username, fullName: fullName)
+                        // ✅ Check if session exists
+                        if authResponse.session != nil {
+                            print("✅ Session established during signup")
+                            self.navigateToOnboarding(username: username, fullName: fullName)
+                        } else {
+                            // ✅ No session - try signing in (old SDK method)
+                            print("⚠️ No session after signup, attempting sign in...")
+                            Task {
+                                do {
+                                    // ✅ FIXED: Use old SDK method signature
+                                    try await supabase.auth.signIn(email: email, password: password)
+                                    
+                                    // ✅ Wait a moment for session to be established
+                                    try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                                    
+                                    await MainActor.run {
+                                        print("✅ Session created via signIn")
+                                        self.navigateToOnboarding(username: username, fullName: fullName)
+                                    }
+                                } catch {
+                                    await MainActor.run {
+                                        print("❌ Sign-in failed: \(error)")
+                                        self.showAlert(
+                                            title: "Account Created",
+                                            message: "Your account was created but we couldn't sign you in automatically. Please sign in manually."
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -167,7 +197,7 @@ class SignUpViewController: UIViewController {
     // MARK: - Email Confirmation Check
     private func requiresEmailConfirmation() -> Bool {
         // Set to true if your Supabase has email confirmation enabled
-        return false // Change to true in production
+        return true // Change to true in production
     }
 
     // MARK: - Helpers

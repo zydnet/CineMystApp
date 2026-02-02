@@ -172,7 +172,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CineMystApp/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "CineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs to access your camera";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "CineMyst needs access to your photo library to select and share media";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "CineMyst needs to access your photos to add them to the app";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -202,7 +202,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = CineMystApp/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "CineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs to access your camera";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "CineMyst needs access to your photo library to select and share media";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "CineMyst needs to access your photos to add them to the app";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;

@@ -35,6 +35,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let url = URLContexts.first?.url else { return }
         print("🔵 App opened with URL (hot start): \(url)")
         handleIncomingURL(url)
+        print("SUPABASE_URL:",
+              Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") ?? "❌ missing")
+
     }
 
     // MARK: - Handle Incoming OAuth URL

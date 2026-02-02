@@ -26,6 +26,7 @@ final class AuthManager {
     }
 
     // MARK: - Sign In
+    // ✅ FIXED: This method now properly returns nothing (matches old SDK)
     func signIn(email: String, password: String) async throws {
         try await client.auth.signIn(email: email, password: password)
     }
@@ -35,7 +36,6 @@ final class AuthManager {
         if let redirect = redirectTo {
             let redirectURL = URL(string: "cinemyst://auth-callback")
             try await client.auth.signInWithOTP(email: email, redirectTo: redirectURL)
-
         } else {
             try await client.auth.signInWithOTP(email: email)
         }
@@ -80,6 +80,9 @@ final class AuthManager {
     
     // MARK: - Profile Picture Upload
     func uploadProfilePicture(_ image: UIImage, userId: UUID) async throws -> String {
+        print("📸 Starting profile picture upload...")
+        
+        // ✅ BETTER: Check session before attempting upload
         guard let session = try await currentSession() else {
             print("❌ No valid session when uploading profile picture")
             throw ProfileError.invalidSession
@@ -92,7 +95,7 @@ final class AuthManager {
             throw ProfileError.imageCompressionFailed
         }
         
-        print("📸 Image compressed, size: \(imageData.count) bytes")
+        print("📦 Image compressed, size: \(imageData.count) bytes")
         
         let fileName = "\(userId.uuidString)/profile.jpg"
         print("📁 Uploading to path: \(fileName)")
@@ -136,16 +139,35 @@ final class AuthManager {
     func saveProfile(_ profileData: ProfileData) async throws {
         print("🚀 Starting saveProfile...")
         
-        guard let session = try await currentSession() else {
-            print("❌ No session found")
+        // ✅ CRITICAL FIX: Retry getting session with a small delay
+        var session: Session?
+        for attempt in 1...3 {
+            print("🔄 Attempt \(attempt) to get session...")
+            do {
+                session = try await currentSession()
+                if session != nil {
+                    print("✅ Session found on attempt \(attempt)")
+                    break
+                }
+            } catch {
+                print("⚠️ Session attempt \(attempt) failed: \(error)")
+            }
+            
+            if attempt < 3 {
+                try await Task.sleep(nanoseconds: 500_000_000) // Wait 0.5 seconds
+            }
+        }
+        
+        guard let validSession = session else {
+            print("❌ No session found after 3 attempts")
             throw ProfileError.invalidSession
         }
         
-        let userId = session.user.id
-        let userEmail = session.user.email ?? ""
+        let userId = validSession.user.id
+        let userEmail = validSession.user.email ?? ""
         print("👤 User ID: \(userId)")
         print("📧 Email: \(userEmail)")
-        print("🔑 Access Token exists: \(session.accessToken.isEmpty == false)")
+        print("🔑 Access Token exists: \(validSession.accessToken.isEmpty == false)")
         
         // Upload profile picture first if exists
         var profilePictureURL: String? = nil
@@ -210,8 +232,6 @@ final class AuthManager {
         print("🎉 All profile data saved successfully!")
     }
     
-
-   
     // MARK: - Private Helper Methods
     private func saveArtistProfile(_ data: ProfileData, userId: UUID) async throws {
         let artistProfile = ArtistProfileRecordForSave(
@@ -219,7 +239,6 @@ final class AuthManager {
             primaryRoles: Array(data.primaryRoles),
             careerStage: data.careerStage,
             skills: data.skills,
-            experienceYears: data.experienceYears,
             travelWilling: data.travelWilling
         )
         
@@ -290,7 +309,6 @@ struct ArtistProfileRecordForSave: Encodable {
     let primaryRoles: [String]
     let careerStage: String?
     let skills: [String]
-    let experienceYears: String?
     let travelWilling: Bool
     
     enum CodingKeys: String, CodingKey {
@@ -298,7 +316,6 @@ struct ArtistProfileRecordForSave: Encodable {
         case primaryRoles = "primary_roles"
         case careerStage = "career_stage"
         case skills
-        case experienceYears = "experience_years"
         case travelWilling = "travel_willing"
     }
 }
@@ -351,12 +368,6 @@ struct ProfileRecord: Codable {
         case updatedAt = "updated_at"
     }
 }
-// AuthManager.swift — add/replace this extension
-// In AuthManager.swift - update the extension
-
-// AuthManager.swift - Replace the Google Sign-In extension
-
-// AuthManager.swift - Replace the Google Sign-In extension
 
 extension AuthManager {
     func signInWithGoogle(from viewController: UIViewController) {
@@ -383,7 +394,6 @@ extension AuthManager {
             } catch {
                 print("❌ Error getting OAuth URL: \(error)")
                 await MainActor.run {
-                    // Show error to user
                     let alert = UIAlertController(
                         title: "Sign In Error",
                         message: error.localizedDescription,

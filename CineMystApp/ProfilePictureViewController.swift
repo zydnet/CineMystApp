@@ -208,7 +208,24 @@ class ProfilePictureViewController: UIViewController, UIImagePickerControllerDel
                     saveButton.isEnabled = true
                     skipButton.isEnabled = true
                     addPhotoButton.isEnabled = true
-                    showErrorAlert(message: "Failed to save profile. Please try again.")
+
+                    // Present clearer messages for common failure modes
+                    if let pErr = error as? ProfileError {
+                        switch pErr {
+                        case .invalidSession:
+                            showErrorAlert(message: "No valid session. Please sign in and try again.")
+                        case .imageCompressionFailed:
+                            showErrorAlert(message: "Failed to process the selected image. Try a different photo.")
+                        case .uploadFailed:
+                            showErrorAlert(message: "Uploading the profile picture failed. The profile may have been saved without the picture.")
+                        case .noProfileFound:
+                            showErrorAlert(message: "Unable to find profile data to save. Please restart onboarding.")
+                        }
+                    } else {
+                        // Fallback: show the underlying error description when available
+                        let message = (error as NSError).localizedDescription
+                        showErrorAlert(message: "Failed to save profile: \(message)")
+                    }
                 }
             }
         }

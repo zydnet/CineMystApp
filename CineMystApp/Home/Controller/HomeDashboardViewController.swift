@@ -2,16 +2,7 @@
 //  HomeDashboardViewController.swift
 //  CineMystApp
 //
-//  Created by Devanshi on 11/11/25.
-//
-
-
-
-//
-//  HomeDashboardViewController.swift
-//  CineMystApp
-//
-//  Created by Devanshi on 11/11/25.
+//  Updated with PostComposer integration and real data loading
 //
 
 import UIKit
@@ -23,9 +14,7 @@ final class HomeDashboardViewController: UIViewController {
     // MARK: - Views
     private let tableView = UITableView(frame: .zero, style: .plain)
     private let searchController = UISearchController(searchResultsController: nil)
-
-    /// SwiftUI floating menu
-    private var floatingMenuContainer: UIView!
+    private let refreshControl = UIRefreshControl()
 
     // MARK: - Data
     private var posts: [Post] = []
@@ -39,24 +28,31 @@ final class HomeDashboardViewController: UIViewController {
 
         setupNavigationBar()
         setupTable()
-        loadDummyData()
         setupFloatingMenu()
-
+        
+        loadPosts()
+        
         navigationItem.backButtonTitle = ""
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Refresh posts when returning to screen
+        loadPosts()
     }
 
     // MARK: - Floating Menu Setup
     private func setupFloatingMenu() {
         
         let swiftUIView = FloatingMenuButton(
-            didTapStory: { [weak self] in
-                self?.openCamera()
+            didTapCamera: { [weak self] in
+                self?.openCameraForPost()
             },
-            didTapPost: { [weak self] in
-                print("📝 Post button tapped (optional screen)")
+            didTapTextPost: { [weak self] in
+                self?.openTextOnlyPost()
             },
             didTapGallery: { [weak self] in
-                self?.openGallery()
+                self?.openGalleryForPost()
             }
         )
         
@@ -69,8 +65,8 @@ final class HomeDashboardViewController: UIViewController {
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 70),
-            hostingController.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: 110),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -80),
             hostingController.view.widthAnchor.constraint(equalToConstant: 220),
             hostingController.view.heightAnchor.constraint(equalToConstant: 220)
         ])
@@ -113,6 +109,10 @@ final class HomeDashboardViewController: UIViewController {
         tableView.separatorStyle = .none
         tableView.showsVerticalScrollIndicator = false
         tableView.backgroundColor = .systemBackground
+        
+        // Add refresh control
+        refreshControl.addTarget(self, action: #selector(handleRefresh), for: .valueChanged)
+        tableView.refreshControl = refreshControl
 
         tableView.register(PostCellTableViewCell.self,
                            forCellReuseIdentifier: PostCellTableViewCell.reuseId)
@@ -131,26 +131,62 @@ final class HomeDashboardViewController: UIViewController {
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
     }
+    
+    // MARK: - Data Loading
+    @objc private func handleRefresh() {
+        loadPosts()
+    }
+    
+    private func loadPosts() {
+        Task {
+            do {
+                // Load posts from Supabase
+                let response = try await supabase
+                    .from("posts")
+                    .select("""
+                        id,
+                        user_id,
+                        caption,
+                        media_urls,
+                        likes_count,
+                        comments_count,
+                        shares_count,
+                        created_at,
+                        profiles!inner(username, profile_picture_url)
+                    """)
+                    .order("created_at", ascending: false)
+                    .limit(50)
+                    .execute()
+                
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                
+                // Parse the response
+                // Note: You'll need to adjust the parsing based on your actual response structure
+                let posts = try decoder.decode([Post].self, from: response.data)
+                
+                await MainActor.run {
+                    self.posts = posts
+                    self.tableView.reloadData()
+                    self.refreshControl.endRefreshing()
+                }
+                
+            } catch {
+                print("❌ Error loading posts: \(error)")
+                await MainActor.run {
+                    // Show dummy data if real data fails
+                    loadDummyData()
+                    self.refreshControl.endRefreshing()
+                }
+            }
+        }
+    }
 
-    // MARK: - Dummy Data
+    // MARK: - Dummy Data (fallback)
     private func loadDummyData() {
-
-        posts = [
-            Post(username: "Rani HBO",
-                 title: "Professional Actor • 4h",
-                 caption: "Just wrapped filming my short film!",
-                 likes: 120, comments: 35, shares: 15,
-                 imageName: "emma",
-                 userImageName: "avatar_rani"),
-
-            Post(username: "Ava Raj",
-                 title: "Director • 2h",
-                 caption: "Next casting call incoming 🎬",
-                 likes: 86, comments: 12, shares: 5,
-                 imageName: "city",
-                 userImageName: "avatar_ava")
-        ]
-
+        // Keep this as fallback during development
+        posts = []
+        
         jobs = [
             Job(role: "Lead Actor - City of Dreams",
                 company: "YRF Casting",
@@ -207,6 +243,47 @@ final class HomeDashboardViewController: UIViewController {
         }
         present(vc, animated: true)
     }
+    
+    // MARK: - Post Creation Actions
+    private func openCameraForPost() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            showAlert(message: "Camera not available")
+            return
+        }
+        
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = self
+        picker.mediaTypes = ["public.image", "public.movie"]
+        present(picker, animated: true)
+    }
+    
+    private func openGalleryForPost() {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = 10
+        config.filter = .any(of: [.images, .videos])
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+    
+    private func openTextOnlyPost() {
+        openPostComposer(with: [])
+    }
+    
+    private func openPostComposer(with media: [DraftMedia]) {
+        let composer = PostComposerViewController(initialMedia: media)
+        composer.delegate = self
+        composer.modalPresentationStyle = .fullScreen
+        present(composer, animated: true)
+    }
+    
+    private func showAlert(message: String) {
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
 }
 
 // MARK: - Search Delegate
@@ -259,87 +336,83 @@ extension HomeDashboardViewController: UITableViewDataSource, UITableViewDelegat
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        indexPath.section == 0 ? UITableView.automaticDimension : 180
+    }
+    
+    func tableView(_ tableView: UITableView, estimatedHeightForRowAt indexPath: IndexPath) -> CGFloat {
         indexPath.section == 0 ? 440 : 180
     }
 }
 
-//
-// MARK: - CAMERA + GALLERY + 
-//
-extension HomeDashboardViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate, PHPickerViewControllerDelegate {
-
-    // MARK: - CAMERA
-    func openCamera() {
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
+// MARK: - Camera Picker Delegate
+extension HomeDashboardViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    
+    func imagePickerController(_ picker: UIImagePickerController,
+                               didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        picker.dismiss(animated: true)
         
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = self
-        picker.allowsEditing = false
-        
-        present(picker, animated: true)
+        if let image = info[.originalImage] as? UIImage {
+            let media = DraftMedia(image: image, videoURL: nil, type: .image)
+            openPostComposer(with: [media])
+        } else if let videoURL = info[.mediaURL] as? URL {
+            let media = DraftMedia(image: nil, videoURL: videoURL, type: .video)
+            openPostComposer(with: [media])
+        }
     }
-
-    // MARK: - MULTI SELECT GALLERY
-    func openGallery() {
-        var config = PHPickerConfiguration()
-        config.selectionLimit = 0   // Instagram style unlimited
-        config.filter = .images
-        
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = self
-        
-        present(picker, animated: true)
+    
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
     }
+}
 
-    // MARK: - PHPicker RESULT
+// MARK: - Gallery Picker Delegate
+extension HomeDashboardViewController: PHPickerViewControllerDelegate {
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
         
-        var images: [UIImage] = []
+        guard !results.isEmpty else { return }
+        
+        var selectedMedia: [DraftMedia] = []
         let group = DispatchGroup()
         
         for result in results {
             group.enter()
             
-            result.itemProvider.loadObject(ofClass: UIImage.self) { image, _ in
-                if let img = image as? UIImage {
-                    images.append(img)
+            if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                result.itemProvider.loadObject(ofClass: UIImage.self) { image, _ in
+                    if let img = image as? UIImage {
+                        selectedMedia.append(DraftMedia(image: img, videoURL: nil, type: .image))
+                    }
+                    group.leave()
                 }
+            } else {
                 group.leave()
             }
         }
         
-        group.notify(queue: .main) {
-            self.openCreatePost(images: images)
+        group.notify(queue: .main) { [weak self] in
+            self?.openPostComposer(with: selectedMedia)
         }
     }
+}
 
-    // MARK: - CAMERA RESULT
-    func imagePickerController(_ picker: UIImagePickerController,
-                               didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+// MARK: - PostComposerDelegate
+extension HomeDashboardViewController: PostComposerDelegate {
+    func postComposerDidCreatePost(_ post: Post) {
+        // Insert new post at the top
+        posts.insert(post, at: 0)
+        tableView.reloadSections(IndexSet(integer: 0), with: .automatic)
         
-        picker.dismiss(animated: true)
+        // Show success
+        let alert = UIAlertController(title: "✅ Posted!", message: nil, preferredStyle: .alert)
+        present(alert, animated: true)
         
-        if let image = info[.originalImage] as? UIImage {
-            openCreatePost(images: [image])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            alert.dismiss(animated: true)
         }
     }
-
-    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-        picker.dismiss(animated: true)
-    }
-
-    // MARK: - MOVE TO INSTAGRAM-LIKE POST SCREEN
-    func openCreatePost(images: [UIImage]) {
-        let vc = NewPostViewController(images: images)
-        vc.modalPresentationStyle = .fullScreen
-        
-        vc.onPostCompleted = { [weak self] in
-            self?.dismiss(animated: true)
-            self?.tableView.reloadData()
-        }
-        
-        present(vc, animated: true)
+    
+    func postComposerDidCancel() {
+        // Nothing to do
     }
 }

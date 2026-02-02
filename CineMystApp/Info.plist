@@ -14,11 +14,14 @@
 				<string>cinemyst</string>
 			</array>
 		</dict>
+		<dict/>
 	</array>
 	<key>SUPABASE_HOST</key>
 	<string>$(SUPABASE_HOST)</string>
 	<key>SUPABASE_KEY</key>
 	<string>$(SUPABASE_KEY)</string>
+	<key>SUPABASE_URL</key>
+	<string>https://kyhyunyobgouumgwcigk.supabase.co</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
