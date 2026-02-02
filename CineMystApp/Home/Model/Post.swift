@@ -1,4 +1,3 @@
-//
 //  Post.swift
 //  CineMystApp
 //
@@ -17,7 +16,7 @@ import Foundation
 import UIKit
 
 // MARK: - Post Model (for display in feed)
-struct Post: Codable, Identifiable {
+struct Post: Identifiable {
     let id: String
     let userId: String
     let username: String
@@ -35,19 +34,6 @@ struct Post: Codable, Identifiable {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: createdAt, relativeTo: Date())
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case username
-        case userProfilePictureUrl = "user_profile_picture_url"
-        case caption
-        case mediaUrls = "media_urls"
-        case likesCount = "likes_count"
-        case commentsCount = "comments_count"
-        case sharesCount = "shares_count"
-        case createdAt = "created_at"
     }
 }
 
@@ -75,6 +61,22 @@ struct PostMedia: Codable {
     enum MediaType: String {
         case image
         case video
+    }
+    
+    // Custom init for better debugging
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        do {
+            url = try container.decode(String.self, forKey: .url)
+            type = try container.decode(String.self, forKey: .type)
+            thumbnailUrl = try container.decodeIfPresent(String.self, forKey: .thumbnailUrl)
+            width = try container.decodeIfPresent(Int.self, forKey: .width)
+            height = try container.decodeIfPresent(Int.self, forKey: .height)
+        } catch {
+            print("❌ PostMedia decoding error: \(error)")
+            throw error
+        }
     }
 }
 // MARK: - Post Creation Request (for API)
@@ -115,3 +117,4 @@ struct DraftMedia {
     var isImage: Bool { type == .image }
     var isVideo: Bool { type == .video }
 }
+

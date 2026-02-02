@@ -1,4 +1,3 @@
-//
 //  GalleryCell.swift
 //  CineMystApp
 //
@@ -40,5 +39,28 @@ final class GalleryCell: UICollectionViewCell {
     
     func configure(imageName: String) {
         imageView.image = UIImage(named: imageName)
+    }
+    
+    func configureWithURL(imageURL: String) {
+        guard let url = URL(string: imageURL) else {
+            imageView.image = UIImage(systemName: "photo.fill")
+            imageView.tintColor = .gray
+            return
+        }
+        
+        // Load image from URL
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let self = self, let data = data, let image = UIImage(data: data) else {
+                DispatchQueue.main.async {
+                    self?.imageView.image = UIImage(systemName: "photo.fill")
+                    self?.imageView.tintColor = .gray
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.imageView.image = image
+            }
+        }.resume()
     }
 }

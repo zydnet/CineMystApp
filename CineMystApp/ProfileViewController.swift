@@ -1,4 +1,3 @@
-//
 //  ProfileViewController.swift
 //  CineMystApp
 //
@@ -39,7 +38,9 @@ final class ProfileViewController: UIViewController {
     private let segmentControl = UISegmentedControl(items: ["Gallery", "Flicks", "Tagged"])
     private let collectionView: UICollectionView
 
-    private var galleryImages = ["rani1", "rani2", "rani3", "rani4", "rani5", "rani6"]
+    private var userPosts: [Post] = [] // ✅ Fetch real posts instead of dummy images
+    private var galleryPosts: [Post] = [] // Gallery posts (images only)
+    private var flicksPosts: [Post] = [] // Flicks posts (videos only)
     
     // MARK: - Profile Data
     private var userProfile: UserProfileData?
@@ -177,6 +178,7 @@ final class ProfileViewController: UIViewController {
         segmentControl.selectedSegmentTintColor = .clear
         segmentControl.setTitleTextAttributes([.foregroundColor: UIColor.systemPurple, .font: UIFont.boldSystemFont(ofSize: 15)], for: .selected)
         segmentControl.setTitleTextAttributes([.foregroundColor: UIColor.gray], for: .normal)
+        segmentControl.addTarget(self, action: #selector(segmentDidChange), for: .valueChanged)
 
         collectionView.dataSource = self
         collectionView.delegate = self
@@ -360,6 +362,9 @@ final class ProfileViewController: UIViewController {
                     self.userProfile = userData
                     self.updateUI(with: userData)
                     
+                    // ✅ Fetch user's posts for gallery/flicks sections
+                    self.fetchUserPosts(userId: userId.uuidString)
+                    
                     // ✅ Check portfolio status and update buttons
                     self.checkAndUpdatePortfolioButton(userId: userId.uuidString)
                     
@@ -515,6 +520,40 @@ final class ProfileViewController: UIViewController {
         }
     }
     
+    // MARK: - Fetch User Posts for Gallery
+    private func fetchUserPosts(userId: String) {
+        Task {
+            do {
+                print("📸 Fetching user posts for profile gallery...")
+                let posts = try await PostManager.shared.fetchUserPosts(userId: userId, limit: 100)
+                
+                await MainActor.run {
+                    self.userPosts = posts
+                    
+                    // Separate posts into gallery (images) and flicks (videos)
+                    self.galleryPosts = posts.filter { post in
+                        post.mediaUrls.contains { $0.type == "image" }
+                    }
+                    
+                    self.flicksPosts = posts.filter { post in
+                        post.mediaUrls.contains { $0.type == "video" }
+                    }
+                    
+                    print("✅ Loaded \(self.galleryPosts.count) gallery posts and \(self.flicksPosts.count) flicks")
+                    self.collectionView.reloadData()
+                }
+            } catch {
+                print("❌ Error fetching user posts: \(error)")
+                await MainActor.run {
+                    self.userPosts = []
+                    self.galleryPosts = []
+                    self.flicksPosts = []
+                    self.collectionView.reloadData()
+                }
+            }
+        }
+    }
+    
     // MARK: - Error Handling
     private func showError(message: String) {
         let alert = UIAlertController(title: "Error", message: message, preferredStyle: .alert)
@@ -597,17 +636,50 @@ final class ProfileViewController: UIViewController {
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
+    
+    // MARK: - Segment Control Handler
+    @objc private func segmentDidChange() {
+        collectionView.reloadData()
+    }
 }
 
 // MARK: - UICollectionView
 extension ProfileViewController: UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        galleryImages.count
+        let selectedTab = segmentControl.titleForSegment(at: segmentControl.selectedSegmentIndex) ?? "Gallery"
+        
+        switch selectedTab {
+        case "Gallery":
+            return galleryPosts.count
+        case "Flicks":
+            return flicksPosts.count
+        default: // Tagged
+            return 0 // TODO: Implement tagged posts
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "GalleryCell", for: indexPath) as! GalleryCell
-        cell.configure(imageName: galleryImages[indexPath.row])
+        
+        let selectedTab = segmentControl.titleForSegment(at: segmentControl.selectedSegmentIndex) ?? "Gallery"
+        
+        var post: Post?
+        switch selectedTab {
+        case "Gallery":
+            post = galleryPosts.indices.contains(indexPath.row) ? galleryPosts[indexPath.row] : nil
+        case "Flicks":
+            post = flicksPosts.indices.contains(indexPath.row) ? flicksPosts[indexPath.row] : nil
+        default:
+            break
+        }
+        
+        if let post = post,
+           let firstMedia = post.mediaUrls.first {
+            cell.configureWithURL(imageURL: firstMedia.url)
+        } else {
+            cell.configure(imageName: "profile_image") // Fallback placeholder
+        }
+        
         return cell
     }
 

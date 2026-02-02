@@ -35,7 +35,41 @@ final class PostManager {
             .execute()
         
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            // Try ISO8601 first
+            if let date = try? ISO8601DateFormatter().date(from: dateString) {
+                return date
+            }
+            
+            // Try with milliseconds
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+            
+            // Fallback: try common formats
+            let formatter = DateFormatter()
+            formatter.timeZone = TimeZone(abbreviation: "UTC")
+            
+            let formats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+                "yyyy-MM-dd'T'HH:mm:ssZ",
+                "yyyy-MM-dd HH:mm:ss"
+            ]
+            
+            for format in formats {
+                formatter.dateFormat = format
+                if let date = formatter.date(from: dateString) {
+                    return date
+                }
+            }
+            
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+        }
         
         let posts = try decoder.decode([PostResponse].self, from: response.data)
         
@@ -76,7 +110,41 @@ final class PostManager {
             .execute()
         
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            // Try ISO8601 first
+            if let date = try? ISO8601DateFormatter().date(from: dateString) {
+                return date
+            }
+            
+            // Try with milliseconds
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+            
+            // Fallback: try common formats
+            let formatter = DateFormatter()
+            formatter.timeZone = TimeZone(abbreviation: "UTC")
+            
+            let formats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+                "yyyy-MM-dd'T'HH:mm:ssZ",
+                "yyyy-MM-dd HH:mm:ss"
+            ]
+            
+            for format in formats {
+                formatter.dateFormat = format
+                if let date = formatter.date(from: dateString) {
+                    return date
+                }
+            }
+            
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+        }
         
         let posts = try decoder.decode([PostResponse].self, from: response.data)
         
@@ -111,18 +179,14 @@ final class PostManager {
     // MARK: - Create Post
     func createPost(caption: String?, media: [DraftMedia]) async throws -> Post {
         print("📝 Starting post creation...")
-        print("   Caption: \(caption ?? "nil")")
-        print("   Media count: \(media.count)")
         
         guard let session = try await AuthManager.shared.currentSession() else {
-            print("❌ No active session")
             throw PostError.notAuthenticated
         }
         
         let userId = session.user.id
-        print("✅ User ID: \(userId)")
         
-        // Upload media files and collect their URLs
+        // 1. Upload all media first
         var mediaItems: [(url: String, type: String, thumbnail: String?, width: Int?, height: Int?)] = []
         
         for (index, mediaItem) in media.enumerated() {
@@ -130,8 +194,6 @@ final class PostManager {
             
             if let image = mediaItem.image {
                 let url = try await uploadImage(image, userId: userId, index: index)
-                print("✅ Image uploaded: \(url)")
-                
                 mediaItems.append((
                     url: url,
                     type: "image",
@@ -141,8 +203,6 @@ final class PostManager {
                 ))
             } else if let videoURL = mediaItem.videoURL {
                 let url = try await uploadVideo(videoURL, userId: userId, index: index)
-                print("✅ Video uploaded: \(url)")
-                
                 mediaItems.append((
                     url: url,
                     type: "video",
@@ -153,139 +213,145 @@ final class PostManager {
             }
         }
         
-        print("✅ All media uploaded. Creating post record...")
-        
-        // Build post payload
-        var postPayload: [String: Any] = [
-            "user_id": userId.uuidString,
-            "likes_count": 0,
-            "comments_count": 0,
-            "shares_count": 0
-        ]
-        
-        if let caption = caption, !caption.isEmpty {
-            postPayload["caption"] = caption
+        // 2. Create post record - SIMPLIFIED
+        struct PostInsert: Encodable {
+            let user_id: String
+            let caption: String?
         }
         
-        print("📦 Payload keys: \(postPayload.keys)")
+        let postInsert = PostInsert(
+            user_id: userId.uuidString,
+            caption: caption
+        )
         
-        // Insert post
-        do {
-            let postJsonData = try JSONSerialization.data(withJSONObject: postPayload)
-            
-            let insertResponse = try await client
-                .from("posts")
-                .insert(postJsonData)
-                .execute()
-            
-            print("✅ Post inserted to database")
-            
-            // Parse the post ID from response
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let insertedPosts = try decoder.decode([PostResponse].self, from: insertResponse.data)
-            guard let insertedPost = insertedPosts.first else {
-                print("❌ No post ID in insert response")
-                throw PostError.invalidData
-            }
-            
-            let postId = insertedPost.id
-            print("✅ Post ID: \(postId)")
-            
-            // Insert media items into post_media table
-            print("📸 Inserting media records...")
-            for (index, mediaItem) in mediaItems.enumerated() {
-                var mediaPayload: [String: Any] = [
-                    "post_id": postId,
-                    "media_url": mediaItem.url,
-                    "media_type": mediaItem.type,
-                    "display_order": index
-                ]
-                
-                if let thumbnail = mediaItem.thumbnail {
-                    mediaPayload["thumbnail_url"] = thumbnail
-                }
-                if let width = mediaItem.width {
-                    mediaPayload["width"] = width
-                }
-                if let height = mediaItem.height {
-                    mediaPayload["height"] = height
-                }
-                
-                let mediaJsonData = try JSONSerialization.data(withJSONObject: mediaPayload)
-                try await client
-                    .from("post_media")
-                    .insert(mediaJsonData)
-                    .execute()
-                
-                print("✅ Media \(index + 1) inserted")
-            }
-            
-            // Fetch complete post with media and profile
-            print("🔄 Fetching complete post...")
-            let fetchResponse = try await client
-                .from("posts")
-                .select("""
-                    id,
-                    user_id,
-                    caption,
-                    likes_count,
-                    comments_count,
-                    shares_count,
-                    created_at,
-                    profiles(username, profile_picture_url),
-                    post_media(media_url, media_type, thumbnail_url, width, height, display_order)
-                """)
-                .eq("id", value: postId)
-                .single()
-                .execute()
-            
-            print("✅ Post fetched with media")
-            
-            // Debug: print raw response
-            if let jsonString = String(data: fetchResponse.data, encoding: .utf8) {
-                print("📦 Raw response: \(jsonString.prefix(200))...")
-            }
-            
-            let postResponse = try decoder.decode(PostResponse.self, from: fetchResponse.data)
-            
-            print("✅ Post created successfully! ID: \(postResponse.id)")
-            
-            return Post(
-                id: postResponse.id,
-                userId: postResponse.userId,
-                username: postResponse.profiles?.username ?? "Unknown",
-                userProfilePictureUrl: postResponse.profiles?.profilePictureUrl,
-                caption: postResponse.caption,
-                mediaUrls: postResponse.postMedia ?? [],
-                likesCount: postResponse.likesCount,
-                commentsCount: postResponse.commentsCount,
-                sharesCount: postResponse.sharesCount,
-                createdAt: postResponse.createdAt
-            )
-        } catch {
-            print("❌ Error creating post: \(error)")
-            if let decodingError = error as? DecodingError {
-                print("❌ Decoding error details:")
-                switch decodingError {
-                case .dataCorrupted(let context):
-                    print("   Path: \(context.codingPath)")
-                    print("   Debug: \(context.debugDescription)")
-                case .keyNotFound(let key, let context):
-                    print("   Missing key: \(key)")
-                    print("   Path: \(context.codingPath)")
-                case .typeMismatch(let type, let context):
-                    print("   Expected type: \(type)")
-                    print("   Path: \(context.codingPath)")
-                case .valueNotFound(let type, let context):
-                    print("   Missing value of type: \(type)")
-                    print("   Path: \(context.codingPath)")
-                @unknown default:
-                    print("   Unknown error")
-                }
-            }
-            throw error
+        // Insert post and get ID back
+        let postResponse = try await client
+            .from("posts")
+            .insert(postInsert)
+            .select("id")  // ← Only select the ID we need
+            .single()      // ← Get single record
+            .execute()
+        
+        // Decode just the ID
+        struct PostIdResponse: Decodable {
+            let id: String
         }
+        
+        let decoder = JSONDecoder()
+        let postIdData = try decoder.decode(PostIdResponse.self, from: postResponse.data)
+        let postId = postIdData.id
+        
+        print("✅ Post created with ID: \(postId)")
+        
+        // 3. Insert all media records
+        if !mediaItems.isEmpty {
+            struct MediaInsert: Encodable {
+                let post_id: String
+                let media_url: String
+                let media_type: String
+                let thumbnail_url: String?
+                let width: Int?
+                let height: Int?
+                let display_order: Int
+            }
+            
+            let mediaInserts = mediaItems.enumerated().map { index, item in
+                MediaInsert(
+                    post_id: postId,
+                    media_url: item.url,
+                    media_type: item.type,
+                    thumbnail_url: item.thumbnail,
+                    width: item.width,
+                    height: item.height,
+                    display_order: index
+                )
+            }
+            
+            // Insert all media at once (more efficient)
+            try await client
+                .from("post_media")
+                .insert(mediaInserts)
+                .execute()
+            
+            print("✅ Inserted \(mediaItems.count) media items")
+        }
+        
+        // 4. Fetch the complete post with all relations
+        return try await fetchCompletePost(postId: postId)
+    }
+    
+    // Helper function to fetch complete post
+    private func fetchCompletePost(postId: String) async throws -> Post {
+        let response = try await client
+            .from("posts")
+            .select("""
+                id,
+                user_id,
+                caption,
+                likes_count,
+                comments_count,
+                shares_count,
+                created_at,
+                profiles(username, profile_picture_url),
+                post_media(media_url, media_type, thumbnail_url, width, height, display_order)
+            """)
+            .eq("id", value: postId)
+            .order("display_order", ascending: true, referencedTable: "post_media")
+            .single()
+            .execute()
+        
+        let decoder = JSONDecoder()
+        // Use the same flexible date decoding strategy as in fetchPosts
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            // Try ISO8601 first
+            if let date = try? ISO8601DateFormatter().date(from: dateString) {
+                return date
+            }
+            
+            // Try with milliseconds
+            let isoFormatter = ISO8601DateFormatter()
+            isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+            
+            // Fallback: try common formats
+            let formatter = DateFormatter()
+            formatter.timeZone = TimeZone(abbreviation: "UTC")
+            
+            let formats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+                "yyyy-MM-dd'T'HH:mm:ssZ",
+                "yyyy-MM-dd HH:mm:ss"
+            ]
+            
+            for format in formats {
+                formatter.dateFormat = format
+                if let date = formatter.date(from: dateString) {
+                    return date
+                }
+            }
+            
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot decode date: \(dateString)")
+        }
+        
+        let postResponse = try decoder.decode(PostResponse.self, from: response.data)
+        
+        return Post(
+            id: postResponse.id,
+            userId: postResponse.userId,
+            username: postResponse.profiles?.username ?? "Unknown",
+            userProfilePictureUrl: postResponse.profiles?.profilePictureUrl,
+            caption: postResponse.caption,
+            mediaUrls: postResponse.postMedia ?? [],
+            likesCount: postResponse.likesCount,
+            commentsCount: postResponse.commentsCount,
+            sharesCount: postResponse.sharesCount,
+            createdAt: postResponse.createdAt
+        )
     }
     
     // MARK: - Upload Media
@@ -399,18 +465,22 @@ struct PostResponse: Codable {
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        userId = try container.decode(String.self, forKey: .userId)
-        caption = try container.decodeIfPresent(String.self, forKey: .caption)
-        likesCount = try container.decode(Int.self, forKey: .likesCount)
-        commentsCount = try container.decode(Int.self, forKey: .commentsCount)
-        sharesCount = try container.decode(Int.self, forKey: .sharesCount)
-        createdAt = try container.decode(Date.self, forKey: .createdAt)
-        profiles = try container.decodeIfPresent(ProfileData.self, forKey: .profiles)
-        postMedia = try container.decodeIfPresent([PostMedia].self, forKey: .postMedia)
+        do {
+            id = try container.decode(String.self, forKey: .id)
+            userId = try container.decode(String.self, forKey: .userId)
+            caption = try container.decodeIfPresent(String.self, forKey: .caption)
+            likesCount = try container.decode(Int.self, forKey: .likesCount)
+            commentsCount = try container.decode(Int.self, forKey: .commentsCount)
+            sharesCount = try container.decode(Int.self, forKey: .sharesCount)
+            createdAt = try container.decode(Date.self, forKey: .createdAt)
+            profiles = try container.decodeIfPresent(ProfileData.self, forKey: .profiles)
+            postMedia = try container.decodeIfPresent([PostMedia].self, forKey: .postMedia)
+        } catch {
+            print("❌ PostResponse decoding error: \(error)")
+            throw error
+        }
     }
 }
-
 
 // MARK: - Errors
 enum PostError: Error, LocalizedError {

@@ -48,16 +48,13 @@ final class HomeDashboardViewController: UIViewController {
             didTapCamera: { [weak self] in
                 self?.openCameraForPost()
             },
-            didTapTextPost: { [weak self] in
-                self?.openTextOnlyPost()
-            },
             didTapGallery: { [weak self] in
                 self?.openGalleryForPost()
             }
         )
         
         let hostingController = UIHostingController(rootView: swiftUIView)
-        hostingController.view.backgroundColor = .clear
+        hostingController.view.backgroundColor = UIColor.clear
         
         addChild(hostingController)
         view.addSubview(hostingController.view)
@@ -140,30 +137,8 @@ final class HomeDashboardViewController: UIViewController {
     private func loadPosts() {
         Task {
             do {
-                // Load posts from Supabase
-                let response = try await supabase
-                    .from("posts")
-                    .select("""
-                        id,
-                        user_id,
-                        caption,
-                        media_urls,
-                        likes_count,
-                        comments_count,
-                        shares_count,
-                        created_at,
-                        profiles!inner(username, profile_picture_url)
-                    """)
-                    .order("created_at", ascending: false)
-                    .limit(50)
-                    .execute()
-                
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                
-                // Parse the response
-                // Note: You'll need to adjust the parsing based on your actual response structure
-                let posts = try decoder.decode([Post].self, from: response.data)
+                // Load posts from Supabase using PostManager (which handles the new post_media schema)
+                let posts = try await PostManager.shared.fetchPosts(limit: 50, offset: 0)
                 
                 await MainActor.run {
                     self.posts = posts

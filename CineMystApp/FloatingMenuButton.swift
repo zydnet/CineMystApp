@@ -1,4 +1,3 @@
-//
 //  FloatingMenuButton.swift
 //  CineMystApp
 //
@@ -13,41 +12,30 @@ struct FloatingMenuButton: View {
     
     // MARK: - Public Action Closures
     var didTapCamera: (() -> Void)?
-    var didTapTextPost: (() -> Void)?
     var didTapGallery: (() -> Void)?
     
     @State private var isExpanded = false
     
     var body: some View {
         ZStack {
-            // Camera Button (Top-Right, 0°)
+            // Camera Button (Top, 45°)
             MenuActionButton(
                 icon: "camera.fill",
                 label: "Camera",
                 isVisible: isExpanded,
-                offset: calculateOffset(angle: 0, radius: 110)
+                offset: calculateOffset(angle: 45, radius: 120)
             ) {
                 collapseAndExecute(didTapCamera)
             }
             
-            // Gallery Button (Top-Center, 45°)
+            // Gallery Button (Top-Left, 90°)
             MenuActionButton(
                 icon: "photo.on.rectangle",
                 label: "Gallery",
                 isVisible: isExpanded,
-                offset: calculateOffset(angle: 45, radius: 120)
-            ) {
-                collapseAndExecute(didTapGallery)
-            }
-            
-            // Text Post Button (Left, 90°)
-            MenuActionButton(
-                icon: "square.and.pencil",
-                label: "Text",
-                isVisible: isExpanded,
                 offset: calculateOffset(angle: 90, radius: 110)
             ) {
-                collapseAndExecute(didTapTextPost)
+                collapseAndExecute(didTapGallery)
             }
             
             // Main Plus/X Button
@@ -90,7 +78,9 @@ struct FloatingMenuButton: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             isExpanded = false
         }
+        print("🎬 Menu item tapped, executing action...")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            print("🎬 Calling action closure...")
             action?()
         }
     }
@@ -105,7 +95,10 @@ struct MenuActionButton: View {
     let action: () -> Void
     
     var body: some View {
-        Button(action: action) {
+        Button(action: {
+            print("✅ Button tapped: \(label)")
+            action()
+        }) {
             VStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 20, weight: .semibold))
@@ -126,6 +119,7 @@ struct MenuActionButton: View {
                     .foregroundColor(.primary)
             }
         }
+        .contentShape(Rectangle())
         .offset(isVisible ? offset : .zero)
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible ? 1 : 0.1)
