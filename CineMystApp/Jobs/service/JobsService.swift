@@ -103,6 +103,24 @@ class JobsService {
         
         return jobs
     }
+    
+    func fetchJobsByIds(jobIds: [UUID]) async throws -> [Job] {
+        guard !jobIds.isEmpty else {
+            return []
+        }
+        
+        let jobIdStrings = jobIds.map { $0.uuidString }
+        
+        let jobs: [Job] = try await supabase
+            .from("jobs")
+            .select()
+            .in("id", values: jobIdStrings)
+            .execute()
+            .value
+        
+        return jobs
+    }
+    
     // MARK: - Jobs
     
     func fetchActiveJobs() async throws -> [Job] {

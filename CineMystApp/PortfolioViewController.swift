@@ -11,6 +11,7 @@ class PortfolioViewController: UIViewController {
     
     // MARK: - Properties
     var isOwnProfile = false
+    var portfolioId: String? // For viewing other user's portfolio
     private var portfolioData: ActorPortfolioData?
     
     // MARK: - UI Components
@@ -180,15 +181,38 @@ class PortfolioViewController: UIViewController {
         
         Task {
             do {
-                guard let session = try await AuthManager.shared.currentSession() else {
-                    throw NSError(domain: "Auth", code: 401)
-                }
+                let userId: String
                 
-                let userId = session.user.id.uuidString
+                if let portfolioId = portfolioId {
+                    // Viewing another user's portfolio - use provided portfolioId
+                    // First, fetch the portfolio to get the user_id
+                    let portfolioResponse = try await supabase
+                        .from("actor_portfolios")
+                        .select("user_id")
+                        .eq("id", value: portfolioId)
+                        .single()
+                        .execute()
+                    
+                    struct PortfolioUserId: Codable {
+                        let userId: String
+                        enum CodingKeys: String, CodingKey {
+                            case userId = "user_id"
+                        }
+                    }
+                    
+                    let portfolioUser = try JSONDecoder().decode(PortfolioUserId.self, from: portfolioResponse.data)
+                    userId = portfolioUser.userId
+                } else {
+                    // Viewing own portfolio
+                    guard let session = try await AuthManager.shared.currentSession() else {
+                        throw NSError(domain: "Auth", code: 401)
+                    }
+                    userId = session.user.id.uuidString
+                }
                 
                 // Fetch portfolio
                 let portfolioResponse = try await supabase
-                    .from("portfolios")
+                    .from("actor_portfolios")
                     .select()
                     .eq("user_id", value: userId)
                     .eq("is_primary", value: true)

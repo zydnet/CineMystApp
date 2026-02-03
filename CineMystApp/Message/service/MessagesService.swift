@@ -169,17 +169,16 @@ class MessagesService {
             updatedAt: Date()
         )
         
-        let created: Message = try await client
+        // Insert without expecting a return value
+        try await client
             .from("messages")
             .insert(newMessage)
-            .single()
             .execute()
-            .value
         
         // Update conversation's last message
-        try await updateConversationLastMessage(conversationId: conversationId, message: created)
+        try await updateConversationLastMessage(conversationId: conversationId, message: newMessage)
         
-        return created
+        return newMessage
     }
     
     /// Mark messages as read
@@ -210,7 +209,7 @@ class MessagesService {
     /// Fetch user profile
     func fetchUserProfile(userId: UUID) async throws -> UserProfile {
         let profile: UserProfile = try await client
-            .from("user_profiles")
+            .from("profiles")
             .select()
             .eq("id", value: userId.uuidString)
             .single()
@@ -225,7 +224,7 @@ class MessagesService {
         guard !query.isEmpty else { return [] }
         
         let profiles: [UserProfile] = try await client
-            .from("user_profiles")
+            .from("profiles")
             .select()
             .or("full_name.ilike.%\(query)%,username.ilike.%\(query)%")
             .limit(20)

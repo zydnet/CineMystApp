@@ -258,6 +258,8 @@ final class ShortlistedViewController: UIViewController {
                     return
                 }
                 
+                print("🔍 Loading shortlisted candidates for job: \(job.id.uuidString)")
+                
                 // Fetch shortlisted applications
                 let shortlistedApps: [Application] = try await supabase
                     .from("applications")
@@ -267,28 +269,80 @@ final class ShortlistedViewController: UIViewController {
                     .execute()
                     .value
                 
-                // Convert to ShortlistedCandidate
+                print("📊 Found \(shortlistedApps.count) shortlisted applications")
+                for app in shortlistedApps {
+                    print("   - App \(app.id.uuidString.prefix(8)): status=\(app.status.rawValue)")
+                }
+                
+                // Fetch user profiles for all actors
+                var userProfiles: [UUID: (name: String, avatar: UIImage?)] = [:]
+                for app in shortlistedApps {
+                    if let profile = try? await self.fetchUserProfile(userId: app.actorId) {
+                        userProfiles[app.actorId] = profile
+                    }
+                }
+                
+                // Convert to ShortlistedCandidate with real user data
                 self.candidates = shortlistedApps.map { app in
-                    ShortlistedCandidate(
+                    let userData = userProfiles[app.actorId]
+                    return ShortlistedCandidate(
                         actorId: app.actorId,
-                        name: "Applicant \(app.id.uuidString.prefix(8))",
+                        name: userData?.name ?? "Applicant \(app.id.uuidString.prefix(8))",
                         experience: "Task Submitted",
                         location: "India",
                         daysAgo: self.timeAgoString(from: app.appliedAt),
                         isConnected: false,
                         isTaskSubmitted: app.status == .taskSubmitted || app.status == .shortlisted || app.status == .selected,
-                        profileImage: UIImage(named: "avatar_placeholder")
+                        profileImage: userData?.avatar ?? UIImage(named: "avatar_placeholder")
                     )
                 }
                 
+                print("✅ Mapped \(self.candidates.count) candidates")
+                
                 DispatchQueue.main.async {
+                    print("🔄 Updating UI: \(self.candidates.count) applications")
                     self.subtitleLabel.text = "\(self.candidates.count) applications"
                     self.tableView.reloadData()
+                    print("✅ TableView reloaded")
                 }
             } catch {
                 print("❌ Error loading shortlisted candidates: \(error)")
             }
         }
+    }
+    
+    private func fetchUserProfile(userId: UUID) async throws -> (name: String, avatar: UIImage?) {
+        struct UserProfile: Codable {
+            let fullName: String?
+            let username: String?
+            let avatarUrl: String?
+            
+            enum CodingKeys: String, CodingKey {
+                case fullName = "full_name"
+                case username
+                case avatarUrl = "avatar_url"
+            }
+        }
+        
+        let profile: UserProfile = try await supabase
+            .from("profiles")
+            .select()
+            .eq("id", value: userId.uuidString)
+            .single()
+            .execute()
+            .value
+        
+        let name = profile.fullName ?? profile.username ?? "User \(userId.uuidString.prefix(8))"
+        
+        // Load avatar if URL exists
+        var avatar: UIImage?
+        if let avatarUrl = profile.avatarUrl, let url = URL(string: avatarUrl) {
+            if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+                avatar = image
+            }
+        }
+        
+        return (name, avatar)
     }
     
     private func timeAgoString(from date: Date) -> String {
@@ -341,11 +395,12 @@ final class ShortlistedViewController: UIViewController {
 extension ShortlistedViewController: UITableViewDataSource {
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        print("📊 TableView asking for row count: \(candidates.count)")
         return candidates.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-
+        print("🎨 Creating cell for row \(indexPath.row)")
         let cell = tableView.dequeueReusableCell(withIdentifier: ShortlistedCell.id, for: indexPath) as! ShortlistedCell
         let candidate = candidates[indexPath.row]
 
@@ -372,7 +427,7 @@ extension ShortlistedViewController: UITableViewDataSource {
                     // Import MessagesViewController to use ChatViewController
                     let chatVC = ChatViewController()
                     chatVC.conversationId = conversation.id
-                    chatVC.title = name
+                    chatVC.otherUserName = name
                     self.navigationController?.pushViewController(chatVC, animated: true)
                 }
             } catch {

@@ -30,6 +30,15 @@ class CandidateCardView: UIView {
         view.backgroundColor = .black
         return view
     }()
+    
+    private let profileImageView: UIImageView = {
+        let iv = UIImageView()
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.contentMode = .scaleAspectFill
+        iv.backgroundColor = .darkGray
+        iv.clipsToBounds = true
+        return iv
+    }()
 
     // Dark gradient overlay for better text visibility
     private let gradientLayer = CAGradientLayer()
@@ -90,46 +99,68 @@ class CandidateCardView: UIView {
     // MARK: - Setup Video
 
     private func setupVideo() {
-        // Prefer remote URL if available, else fall back to bundled asset
-        let urlToPlay: URL?
-        if let remote = model.videoURL {
-            urlToPlay = remote
+        // Check if we have a video URL
+        if let videoURL = model.videoURL {
+            // Show video
+            profileImageView.isHidden = true
+            videoContainerView.isHidden = false
+            
+            // Create player
+            player = AVPlayer(url: videoURL)
+
+            // Create player layer
+            playerLayer = AVPlayerLayer(player: player)
+            playerLayer?.videoGravity = .resizeAspectFill
+            playerLayer?.frame = videoContainerView.bounds
+
+            if let playerLayer = playerLayer {
+                videoContainerView.layer.addSublayer(playerLayer)
+            }
+
+            // Loop video
+            NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: player?.currentItem,
+                queue: .main
+            ) { [weak self] _ in
+                self?.player?.seek(to: .zero)
+                self?.player?.play()
+            }
+
+            // Start playing
+            player?.play()
+
+            // Mute by default (optional)
+            player?.isMuted = true
         } else {
-            urlToPlay = Bundle.main.url(forResource: model.videoName, withExtension: "mp4")
+            // Show profile image
+            videoContainerView.isHidden = true
+            profileImageView.isHidden = false
+            
+            // Load profile image if URL exists
+            if let imageUrlString = model.profileImageUrl, let imageURL = URL(string: imageUrlString) {
+                loadImage(from: imageURL)
+            } else {
+                // Show placeholder
+                profileImageView.image = UIImage(systemName: "person.circle.fill")
+                profileImageView.tintColor = .systemGray
+            }
         }
-
-        guard let videoURL = urlToPlay else {
-            print("❌ CandidateCardView: No valid video URL for model \(model.name)")
-            return
-        }
-
-        // Create player
-        player = AVPlayer(url: videoURL)
-
-        // Create player layer
-        playerLayer = AVPlayerLayer(player: player)
-        playerLayer?.videoGravity = .resizeAspectFill
-        playerLayer?.frame = videoContainerView.bounds
-
-        if let playerLayer = playerLayer {
-            videoContainerView.layer.addSublayer(playerLayer)
-        }
-
-        // Loop video
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: player?.currentItem,
-            queue: .main
-        ) { [weak self] _ in
-            self?.player?.seek(to: .zero)
-            self?.player?.play()
-        }
-
-        // Start playing
-        player?.play()
-
-        // Mute by default (optional)
-        player?.isMuted = true
+    }
+    
+    private func loadImage(from url: URL) {
+        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let data = data, error == nil, let image = UIImage(data: data) else {
+                DispatchQueue.main.async {
+                    self?.profileImageView.image = UIImage(systemName: "person.circle.fill")
+                    self?.profileImageView.tintColor = .systemGray
+                }
+                return
+            }
+            DispatchQueue.main.async {
+                self?.profileImageView.image = image
+            }
+        }.resume()
     }
 
     // MARK: - Setup UI
@@ -138,6 +169,9 @@ class CandidateCardView: UIView {
 
         // VIDEO CONTAINER
         addSubview(videoContainerView)
+        
+        // PROFILE IMAGE VIEW
+        addSubview(profileImageView)
 
         // GRADIENT
         gradientLayer.colors = [
@@ -168,6 +202,12 @@ class CandidateCardView: UIView {
             videoContainerView.leadingAnchor.constraint(equalTo: leadingAnchor),
             videoContainerView.trailingAnchor.constraint(equalTo: trailingAnchor),
             videoContainerView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            
+            // PROFILE IMAGE VIEW → FILL ENTIRE CARD
+            profileImageView.topAnchor.constraint(equalTo: topAnchor),
+            profileImageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            profileImageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            profileImageView.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             nameLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
             nameLabel.bottomAnchor.constraint(equalTo: locationLabel.topAnchor, constant: -6),

@@ -683,17 +683,115 @@ extension MessagesViewController: UITableViewDataSource, UITableViewDelegate {
 // MARK: - Chat Detail View Controller (Placeholder)
 
 /// A simple chat detail view that will show messages for a conversation
+// MARK: - Chat Message Cell
+
+final class ChatMessageCell: UITableViewCell {
+    static let reuseID = "ChatMessageCell"
+    
+    private let bubbleView: UIView = {
+        let view = UIView()
+        view.layer.cornerRadius = 18
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+    
+    private let messageLabel: UILabel = {
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.font = .systemFont(ofSize: 16)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+    
+    private let timeLabel: UILabel = {
+        let label = UILabel()
+        label.font = .systemFont(ofSize: 11)
+        label.textColor = .secondaryLabel
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+    
+    private var leadingConstraint: NSLayoutConstraint!
+    private var trailingConstraint: NSLayoutConstraint!
+    
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        setupUI()
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    private func setupUI() {
+        selectionStyle = .none
+        backgroundColor = .clear
+        
+        contentView.addSubview(bubbleView)
+        bubbleView.addSubview(messageLabel)
+        contentView.addSubview(timeLabel)
+        
+        leadingConstraint = bubbleView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12)
+        trailingConstraint = bubbleView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12)
+        
+        NSLayoutConstraint.activate([
+            bubbleView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            bubbleView.widthAnchor.constraint(lessThanOrEqualToConstant: 280),
+            
+            messageLabel.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
+            messageLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 12),
+            messageLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -12),
+            messageLabel.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
+            
+            timeLabel.topAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: 2),
+            timeLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4)
+        ])
+    }
+    
+    func configure(with message: Message, isFromCurrentUser: Bool) {
+        messageLabel.text = message.content
+        
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        timeLabel.text = formatter.string(from: message.createdAt)
+        
+        if isFromCurrentUser {
+            // Sent messages - blue bubble on right
+            bubbleView.backgroundColor = UIColor.systemBlue
+            messageLabel.textColor = .white
+            leadingConstraint.isActive = false
+            trailingConstraint.isActive = true
+            timeLabel.textAlignment = .right
+            timeLabel.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor).isActive = true
+        } else {
+            // Received messages - gray bubble on left
+            bubbleView.backgroundColor = UIColor.systemGray5
+            messageLabel.textColor = .label
+            trailingConstraint.isActive = false
+            leadingConstraint.isActive = true
+            timeLabel.textAlignment = .left
+            timeLabel.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor).isActive = true
+        }
+    }
+}
+
+// MARK: - Chat View Controller
+
 final class ChatViewController: UIViewController {
     var conversationId: UUID?
+    var otherUserName: String?
     
     private let tableView = UITableView()
     private var messages: [Message] = []
     private let messageInputField = UITextField()
     private let sendButton = UIButton(type: .system)
+    private var currentUserId: UUID?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
+        title = otherUserName ?? "Chat"
+        currentUserId = supabase.auth.currentUser?.id
         setupUI()
         loadMessages()
     }
@@ -702,22 +800,40 @@ final class ChatViewController: UIViewController {
         // Table view for messages
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.separatorStyle = .none
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.register(ChatMessageCell.self, forCellReuseIdentifier: ChatMessageCell.reuseID)
+        tableView.backgroundColor = .systemBackground
+        tableView.keyboardDismissMode = .interactive
         view.addSubview(tableView)
         
         // Input container
         let inputContainer = UIView()
         inputContainer.backgroundColor = .systemBackground
+        inputContainer.layer.borderColor = UIColor.separator.cgColor
+        inputContainer.layer.borderWidth = 0.5
         inputContainer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(inputContainer)
         
         // Message input field
         messageInputField.placeholder = "Type a message..."
         messageInputField.borderStyle = .roundedRect
+        messageInputField.backgroundColor = .systemGray6
+        messageInputField.layer.cornerRadius = 20
+        messageInputField.layer.masksToBounds = true
+        messageInputField.font = .systemFont(ofSize: 16)
         messageInputField.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Add padding to text field
+        let paddingView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 40))
+        messageInputField.leftView = paddingView
+        messageInputField.leftViewMode = .always
+        
         inputContainer.addSubview(messageInputField)
         
         // Send button
         sendButton.setTitle("Send", for: .normal)
+        sendButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
         sendButton.translatesAutoresizingMaskIntoConstraints = false
         sendButton.addTarget(self, action: #selector(sendMessage), for: .touchUpInside)
         inputContainer.addSubview(sendButton)
@@ -727,12 +843,13 @@ final class ChatViewController: UIViewController {
         NSLayoutConstraint.activate([
             inputContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inputContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputContainer.bottomAnchor.constraint(equalTo: safe.bottomAnchor),
-            inputContainer.heightAnchor.constraint(equalToConstant: 60),
+            inputContainer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+            inputContainer.heightAnchor.constraint(equalToConstant: 64),
             
             messageInputField.leadingAnchor.constraint(equalTo: inputContainer.leadingAnchor, constant: 12),
             messageInputField.centerYAnchor.constraint(equalTo: inputContainer.centerYAnchor),
             messageInputField.trailingAnchor.constraint(equalTo: sendButton.leadingAnchor, constant: -8),
+            messageInputField.heightAnchor.constraint(equalToConstant: 40),
             
             sendButton.trailingAnchor.constraint(equalTo: inputContainer.trailingAnchor, constant: -12),
             sendButton.centerYAnchor.constraint(equalTo: inputContainer.centerYAnchor),
@@ -754,6 +871,7 @@ final class ChatViewController: UIViewController {
                 await MainActor.run {
                     self.messages = fetchedMessages
                     self.tableView.reloadData()
+                    self.scrollToBottom(animated: false)
                 }
             } catch {
                 print("❌ Failed to load messages: \(error)")
@@ -761,9 +879,17 @@ final class ChatViewController: UIViewController {
         }
     }
     
+    private func scrollToBottom(animated: Bool) {
+        guard !messages.isEmpty else { return }
+        let indexPath = IndexPath(row: messages.count - 1, section: 0)
+        tableView.scrollToRow(at: indexPath, at: .bottom, animated: animated)
+    }
+    
     @objc private func sendMessage() {
         guard let text = messageInputField.text, !text.isEmpty,
               let conversationId = conversationId else { return }
+        
+        messageInputField.text = ""
         
         Task {
             do {
@@ -772,12 +898,28 @@ final class ChatViewController: UIViewController {
                     content: text
                 )
                 
-                messageInputField.text = ""
                 loadMessages() // Reload to show new message
             } catch {
                 print("❌ Failed to send message: \(error)")
             }
         }
+    }
+}
+
+// MARK: - ChatViewController Table DataSource
+extension ChatViewController: UITableViewDelegate, UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return messages.count
+    }
+    
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: ChatMessageCell.reuseID, for: indexPath) as! ChatMessageCell
+        let message = messages[indexPath.row]
+        let isFromCurrentUser = message.senderId == currentUserId
+        
+        cell.configure(with: message, isFromCurrentUser: isFromCurrentUser)
+        
+        return cell
     }
 }
 

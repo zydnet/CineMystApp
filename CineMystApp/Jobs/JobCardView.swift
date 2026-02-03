@@ -44,11 +44,14 @@ class JobCardView: UIView {
     ) {
         profileImageView.image = image
         titleLabel.text = title
-        companyTagLabel.text = company
+        
+        // Add padding to company label text for capsule look
+        companyTagLabel.text = "  \(company)  "
+        
         locationLabel.text = location
         salaryLabel.text = salary
         daysLeftLabel.text = daysLeft
-        tagLabel.text = "• \(tag)"
+        tagLabel.text = "  \(tag)  "
         appliedLabel.text = appliedCount
     }
 
@@ -70,75 +73,103 @@ class JobCardView: UIView {
     // MARK: - UI Setup
     private func setupUI() {
         backgroundColor = .white
-        layer.cornerRadius = 16
+        layer.cornerRadius = 20
         layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.05
-        layer.shadowRadius = 4
-        layer.shadowOffset = CGSize(width: 0, height: 3)
+        layer.shadowOpacity = 0.12
+        layer.shadowRadius = 16
+        layer.shadowOffset = CGSize(width: 0, height: 8)
+        layer.borderWidth = 1
+        layer.borderColor = UIColor.systemGray5.cgColor
         
         // Image
-        profileImageView.layer.cornerRadius = 28
+        profileImageView.layer.cornerRadius = 32
         profileImageView.layer.masksToBounds = true
         profileImageView.contentMode = .scaleAspectFill
-        profileImageView.backgroundColor = .systemGray5
+        profileImageView.backgroundColor = UIColor(red: 249/255, green: 244/255, blue: 252/255, alpha: 1)
         profileImageView.translatesAutoresizingMaskIntoConstraints = false
+        profileImageView.layer.borderWidth = 2
+        profileImageView.layer.borderColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.1).cgColor
         
         // Title
-        titleLabel.font = UIFont.boldSystemFont(ofSize: 16)
+        titleLabel.font = UIFont.systemFont(ofSize: 17, weight: .bold)
         titleLabel.numberOfLines = 2
+        titleLabel.textColor = .label
         
-        // Company label (simple text, no rounded tag box)
-        companyTagLabel.font = UIFont.systemFont(ofSize: 13)
-        companyTagLabel.textColor = .darkGray
+        // Company label with subtle background
+        companyTagLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        companyTagLabel.textColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.8)
+        companyTagLabel.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.08)
+        companyTagLabel.layer.cornerRadius = 12
+        companyTagLabel.clipsToBounds = true
+        companyTagLabel.textAlignment = .center
+        companyTagLabel.translatesAutoresizingMaskIntoConstraints = false
+        companyTagLabel.heightAnchor.constraint(equalToConstant: 24).isActive = true
         
         // Bookmark button - top right floating
         bookmarkButton.setImage(UIImage(systemName: "bookmark"), for: .normal)
-        bookmarkButton.tintColor = UIColor(red: 80/255, green: 25/255, blue: 60/255, alpha: 1)
+        bookmarkButton.tintColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
         bookmarkButton.translatesAutoresizingMaskIntoConstraints = false
         addSubview(bookmarkButton)
         bookmarkButton.addTarget(self, action: #selector(bookmarkTapped), for: .touchUpInside)
         
         // Location + Salary row (clean, compact)
-        locationIcon.tintColor = .gray
-        clockIcon.tintColor = .gray
+        locationIcon.tintColor = .secondaryLabel
+        clockIcon.tintColor = .secondaryLabel
         
-        locationLabel.font = UIFont.systemFont(ofSize: 13)
-        locationLabel.textColor = .darkGray
+        locationLabel.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+        locationLabel.textColor = .secondaryLabel
         locationIcon.translatesAutoresizingMaskIntoConstraints = false
         clockIcon.translatesAutoresizingMaskIntoConstraints = false
         
-        salaryLabel.font = UIFont.boldSystemFont(ofSize: 14)
-        salaryLabel.textColor = UIColor(red: 113/255, green: 30/255, blue: 96/255, alpha: 1)
+        salaryLabel.font = UIFont.systemFont(ofSize: 16, weight: .bold)
+        salaryLabel.textColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
         
-        daysLeftLabel.font = UIFont.systemFont(ofSize: 13)
-        daysLeftLabel.textColor = .gray
+        daysLeftLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        daysLeftLabel.textColor = .secondaryLabel
         
-        tagLabel.font = UIFont.systemFont(ofSize: 12)
-        tagLabel.textColor = .darkGray
-        tagLabel.backgroundColor = UIColor.systemGray6
-        tagLabel.layer.cornerRadius = 10
+        tagLabel.font = UIFont.systemFont(ofSize: 13, weight: .medium)
+        tagLabel.textColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.9)
+        tagLabel.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.08)
+        tagLabel.layer.cornerRadius = 13
         tagLabel.clipsToBounds = true
         tagLabel.textAlignment = .center
         tagLabel.translatesAutoresizingMaskIntoConstraints = false
-        tagLabel.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        tagLabel.heightAnchor.constraint(equalToConstant: 26).isActive = true
         
-        appliedLabel.font = UIFont.systemFont(ofSize: 12)
-        appliedLabel.textColor = .gray
+        appliedLabel.font = UIFont.systemFont(ofSize: 13, weight: .regular)
+        appliedLabel.textColor = .tertiaryLabel
         
-        // Apply button — compact style
-        applyButton.setTitle("Apply", for: .normal)
-        applyButton.backgroundColor = UIColor(red: 47/255, green: 9/255, blue: 32/255, alpha: 1)
+        // Apply button — enhanced style
+        applyButton.setTitle("Apply Now", for: .normal)
+        applyButton.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
         applyButton.setTitleColor(.white, for: .normal)
-        applyButton.titleLabel?.font = UIFont.boldSystemFont(ofSize: 14)
-        applyButton.layer.cornerRadius = 8
-        applyButton.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        applyButton.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+        applyButton.layer.cornerRadius = 12
+        applyButton.layer.shadowColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.4).cgColor
+        applyButton.layer.shadowOpacity = 0.3
+        applyButton.layer.shadowRadius = 8
+        applyButton.layer.shadowOffset = CGSize(width: 0, height: 4)
+        applyButton.heightAnchor.constraint(equalToConstant: 44).isActive = true
         applyButton.addTarget(self, action: #selector(applyTapped), for: .touchUpInside)
         
         // ---------- STACK LAYOUT ----------
         
-        let titleStack = UIStackView(arrangedSubviews: [titleLabel, companyTagLabel])
+        // Company label container to control width
+        let companyContainer = UIView()
+        companyContainer.translatesAutoresizingMaskIntoConstraints = false
+        companyContainer.addSubview(companyTagLabel)
+        
+        NSLayoutConstraint.activate([
+            companyTagLabel.leadingAnchor.constraint(equalTo: companyContainer.leadingAnchor),
+            companyTagLabel.topAnchor.constraint(equalTo: companyContainer.topAnchor),
+            companyTagLabel.bottomAnchor.constraint(equalTo: companyContainer.bottomAnchor),
+            companyTagLabel.trailingAnchor.constraint(lessThanOrEqualTo: companyContainer.trailingAnchor)
+        ])
+        
+        let titleStack = UIStackView(arrangedSubviews: [titleLabel, companyContainer])
         titleStack.axis = .vertical
         titleStack.spacing = 4
+        titleStack.alignment = .leading
         
         let salaryLocationRow = UIStackView(arrangedSubviews: [
             iconLabelStack(icon: locationIcon, label: locationLabel),
@@ -177,18 +208,18 @@ class JobCardView: UIView {
                 clockIcon.widthAnchor.constraint(equalToConstant: 14),
                 clockIcon.heightAnchor.constraint(equalToConstant: 14),
                 
-            profileImageView.widthAnchor.constraint(equalToConstant: 56),
-            profileImageView.heightAnchor.constraint(equalToConstant: 56),
+            profileImageView.widthAnchor.constraint(equalToConstant: 64),
+            profileImageView.heightAnchor.constraint(equalToConstant: 64),
             
-            mainStack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            mainStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            mainStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            mainStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
+            mainStack.topAnchor.constraint(equalTo: topAnchor, constant: 20),
+            mainStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            mainStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            mainStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -20),
             
-            bookmarkButton.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            bookmarkButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            bookmarkButton.widthAnchor.constraint(equalToConstant: 22),
-            bookmarkButton.heightAnchor.constraint(equalToConstant: 22)
+            bookmarkButton.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            bookmarkButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            bookmarkButton.widthAnchor.constraint(equalToConstant: 26),
+            bookmarkButton.heightAnchor.constraint(equalToConstant: 26)
         ])
     }
 

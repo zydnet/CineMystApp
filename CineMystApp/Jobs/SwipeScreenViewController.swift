@@ -321,7 +321,19 @@ class SwipeScreenViewController: UIViewController {
                 self.taskSubmissions = submissions
                 print("✅ Fetched \(submissions.count) task submissions")
                 
-                // Build cards ONLY for applications that have at least one submission
+                // Fetch user profiles
+                var userProfiles: [UUID: (name: String, imageUrl: String?)] = [:]
+                for app in applications {
+                    do {
+                        let profile = try await self.fetchUserProfile(userId: app.actorId)
+                        userProfiles[app.actorId] = profile
+                    } catch {
+                        print("⚠️ Could not fetch profile for actor \(app.actorId): \(error)")
+                        userProfiles[app.actorId] = ("User \(app.actorId.uuidString.prefix(8))", nil)
+                    }
+                }
+                
+                // Build cards for ALL applications (not just those with submissions)
                 let submissionsByApp = Dictionary(grouping: submissions, by: { $0.applicationId })
                 
                 print("🔍 Building card data:")
@@ -329,36 +341,51 @@ class SwipeScreenViewController: UIViewController {
                 print("  - Applications with submissions: \(submissionsByApp.count)")
                 
                 self.cardData = applications.compactMap { app in
-                    // First, check if there are task submissions
+                    let profile = userProfiles[app.actorId] ?? ("User \(app.actorId.uuidString.prefix(8))", nil)
+                    let userName = profile.name
+                    let profileImageUrl = profile.imageUrl
+                    
+                    // Check if there are task submissions
                     if let appSubs = submissionsByApp[app.id], let latest = appSubs.first {
                         let videoURL = latest.submissionUrl
-                        guard !videoURL.isEmpty else { return nil }
+                        guard !videoURL.isEmpty else {
+                            // No video URL, show profile image
+                            print("  ✅ Card with empty submission URL (showing profile image): \(app.id.uuidString.prefix(8))")
+                            return CandidateModel(
+                                applicationId: app.id,
+                                actorId: app.actorId,
+                                name: userName,
+                                videoURL: nil,
+                                profileImageUrl: profileImageUrl,
+                                location: "India",
+                                experience: "Portfolio Submitted"
+                            )
+                        }
                         
-                        print("  ✅ Card with submission: \(app.id.uuidString.prefix(8)), Status: \(app.status)")
+                        print("  ✅ Card with video submission: \(app.id.uuidString.prefix(8)), Status: \(app.status)")
                         
                         return CandidateModel(
-                            name: "Applicant \(app.id.uuidString.prefix(8))",
+                            applicationId: app.id,
+                            actorId: app.actorId,
+                            name: userName,
                             videoURL: URL(string: videoURL),
-                            videoName: "", // remote video provided via videoURL
+                            profileImageUrl: profileImageUrl,
                             location: "India",
                             experience: "Task Submitted"
                         )
                     } else {
-                        // No task submission, but still show the application if it has portfolio_submitted or higher status
-                        if app.status == .portfolioSubmitted || app.status == .taskSubmitted || app.status == .shortlisted || app.status == .selected {
-                            print("  ✅ Card without submission (portfolio_submitted): \(app.id.uuidString.prefix(8)), Status: \(app.status)")
-                            
-                            return CandidateModel(
-                                name: "Applicant \(app.id.uuidString.prefix(8))",
-                                videoURL: nil,
-                                videoName: "", // No video yet
-                                location: "India",
-                                experience: "Portfolio Submitted"
-                            )
-                        } else {
-                            print("  ❌ Skipping application with status: \(app.status)")
-                            return nil
-                        }
+                        // No task submission - show profile image
+                        print("  ✅ Card without submission (showing profile image): \(app.id.uuidString.prefix(8)), Status: \(app.status)")
+                        
+                        return CandidateModel(
+                            applicationId: app.id,
+                            actorId: app.actorId,
+                            name: userName,
+                            videoURL: nil,
+                            profileImageUrl: profileImageUrl,
+                            location: "India",
+                            experience: "Portfolio Submitted"
+                        )
                     }
                 }
                 
@@ -385,6 +412,31 @@ class SwipeScreenViewController: UIViewController {
         view.bringSubviewToFront(dislikeButton)
         view.bringSubviewToFront(likeButton)
     }
+    
+    private func fetchUserProfile(userId: UUID) async throws -> (name: String, imageUrl: String?) {
+        struct UserProfile: Codable {
+            let fullName: String?
+            let username: String?
+            let avatarUrl: String?
+            
+            enum CodingKeys: String, CodingKey {
+                case fullName = "full_name"
+                case username
+                case avatarUrl = "avatar_url"
+            }
+        }
+        
+        let profile: UserProfile = try await supabase
+            .from("profiles")
+            .select()
+            .eq("id", value: userId.uuidString)
+            .single()
+            .execute()
+            .value
+        
+        let name = profile.fullName ?? profile.username ?? "User \(userId.uuidString.prefix(8))"
+        return (name, profile.avatarUrl)
+    }
 
     private func setupCardFrame(_ card: UIView, position: Int) {
         let inset: CGFloat = CGFloat(position) * 10
@@ -407,7 +459,7 @@ class SwipeScreenViewController: UIViewController {
 
     // MARK: Swipe handling
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let card = gesture.view else { return }
+        guard let card = gesture.view as? CandidateCardView else { return }
 
         let translation = gesture.translation(in: view)
         let percent = translation.x / view.bounds.width
@@ -429,14 +481,27 @@ class SwipeScreenViewController: UIViewController {
         }
     }
 
-    // MARK: - UPDATED SWIPE LOGIC WITH COUNTERS
-    private func animateSwipe(_ card: UIView, direction: CGFloat) {
+    // MARK: - UPDATED SWIPE LOGIC WITH COUNTERS AND SHORTLIST
+    private func animateSwipe(_ card: CandidateCardView, direction: CGFloat) {
+        // Get the card index
+        guard let cardIndex = cardViews.firstIndex(of: card) else { return }
+        let modelIndex = cardData.count - cardViews.count + cardIndex
+        
+        guard modelIndex < cardData.count else { return }
+        let model = cardData[modelIndex]
 
-        // 👉 UPDATE COUNTERS
+        // 👉 UPDATE COUNTERS AND SHORTLIST
         if direction > 0 {
+            // Swiped right - shortlist the candidate
             shortlistedCount += 1
             shortlistedCountLabel.text = "\(shortlistedCount)"
+            
+            // Update application status to shortlisted in backend
+            Task {
+                await updateApplicationStatus(applicationId: model.applicationId, status: .shortlisted)
+            }
         } else {
+            // Swiped left - pass the candidate
             passedCount += 1
             passedCountLabel.text = "\(passedCount)"
         }
@@ -449,8 +514,28 @@ class SwipeScreenViewController: UIViewController {
             self.pushNextCard()
         })
     }
+    
+    private func updateApplicationStatus(applicationId: UUID, status: Application.ApplicationStatus) async {
+        do {
+            struct ApplicationUpdate: Encodable {
+                let status: String
+            }
+            
+            let update = ApplicationUpdate(status: status.rawValue)
+            
+            try await supabase
+                .from("applications")
+                .update(update)
+                .eq("id", value: applicationId.uuidString)
+                .execute()
+            
+            print("✅ Updated application \(applicationId.uuidString.prefix(8)) to status: \(status.rawValue)")
+        } catch {
+            print("❌ Failed to update application status: \(error)")
+        }
+    }
 
-    private func resetCard(_ card: UIView) {
+    private func resetCard(_ card: CandidateCardView) {
         UIView.animate(withDuration: 0.25) {
             card.center = self.view.center
             card.transform = .identity

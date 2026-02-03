@@ -25,8 +25,14 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     private let scrollView = UIScrollView()
     private let contentView = UIView()
     
-    // Search Controller
-    private let searchController = UISearchController(searchResultsController: nil)
+    // Search Bar
+    private let searchBar: UISearchBar = {
+        let sb = UISearchBar()
+        sb.placeholder = "Search jobs"
+        sb.searchBarStyle = .minimal
+        sb.backgroundImage = UIImage()
+        return sb
+    }()
     
     // Title bar
     private let titleLabel: UILabel = {
@@ -105,12 +111,22 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     private var dimView = UIView()
     private var filterVC: FilterScrollViewController?
     
+    // Jobs data
+    private var allJobs: [Job] = []
+    private var filteredJobs: [Job] = []
+    
+    // Active filters
+    private var activeRoleFilter: String?
+    private var activePositionFilter: String?
+    private var activeProjectFilter: String?
+    private var activeEarningFilter: Float?
+    
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .white
         
-        setupSearchController()
+        searchBar.delegate = self
         setupScrollView()
         setupTitleBar()
         setupSearchBar()
@@ -126,17 +142,6 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         super.viewWillAppear(animated)
         // Reload job cards when view appears
         reloadJobCards()
-    }
-    
-    // MARK: - Search Controller Setup
-    private func setupSearchController() {
-        searchController.searchResultsUpdater = self
-        searchController.obscuresBackgroundDuringPresentation = false
-        searchController.searchBar.placeholder = "Search jobs"
-        searchController.searchBar.searchBarStyle = .minimal
-        searchController.hidesNavigationBarDuringPresentation = false
-        searchController.searchBar.backgroundColor = .clear
-        definesPresentationContext = true
     }
     
     // MARK: - ScrollView & Content
@@ -192,20 +197,23 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     private func setupSearchBar() {
         contentView.addSubview(searchBarContainer)
         searchBarContainer.translatesAutoresizingMaskIntoConstraints = false
+        searchBarContainer.backgroundColor = UIColor(white: 1, alpha: 1)
+        searchBarContainer.layer.cornerRadius = 12
         
         // Add the search bar to the container
-        searchBarContainer.addSubview(searchController.searchBar)
-        searchController.searchBar.translatesAutoresizingMaskIntoConstraints = false
+        searchBarContainer.addSubview(searchBar)
+        searchBar.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            searchBarContainer.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
-            searchBarContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
-            searchBarContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            searchBarContainer.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 16),
+            searchBarContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            searchBarContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            searchBarContainer.heightAnchor.constraint(equalToConstant: 52),
             
-            searchController.searchBar.topAnchor.constraint(equalTo: searchBarContainer.topAnchor),
-            searchController.searchBar.leadingAnchor.constraint(equalTo: searchBarContainer.leadingAnchor),
-            searchController.searchBar.trailingAnchor.constraint(equalTo: searchBarContainer.trailingAnchor),
-            searchController.searchBar.bottomAnchor.constraint(equalTo: searchBarContainer.bottomAnchor)
+            searchBar.topAnchor.constraint(equalTo: searchBarContainer.topAnchor),
+            searchBar.leadingAnchor.constraint(equalTo: searchBarContainer.leadingAnchor),
+            searchBar.trailingAnchor.constraint(equalTo: searchBarContainer.trailingAnchor),
+            searchBar.bottomAnchor.constraint(equalTo: searchBarContainer.bottomAnchor)
         ])
     }
     
@@ -297,9 +305,111 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         // Clear existing cards
         jobListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         
-        // Load new cards
-        Task { [weak self] in
-            await self?.addJobCards()
+        // If we have cached jobs, reload from filtered list
+        if !allJobs.isEmpty {
+            Task { [weak self] in
+                await self?.displayFilteredJobs()
+            }
+        } else {
+            // Load new cards from API
+            Task { [weak self] in
+                await self?.addJobCards()
+            }
+        }
+    }
+    
+    private func displayFilteredJobs() async {
+        await MainActor.run { [weak self] in
+            guard let self = self else { return }
+            
+            // Clear existing job cards
+            self.jobListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            
+            for job in self.filteredJobs {
+                let card = JobCardView()
+                
+                // Fetch production house data and application count
+                Task {
+                    let (productionHouse, profilePictureUrl) = await self.fetchProductionHouse(directorId: job.directorId)
+                    let applicationCount = await self.fetchApplicationCount(jobId: job.id)
+                    
+                    await MainActor.run {
+                        // Load profile image asynchronously
+                        if let urlString = profilePictureUrl,
+                           let url = URL(string: urlString) {
+                            Task {
+                                do {
+                                    let (data, _) = try await URLSession.shared.data(from: url)
+                                    if let image = UIImage(data: data) {
+                                        await MainActor.run {
+                                            card.configure(
+                                                image: image,
+                                                title: job.title,
+                                                company: productionHouse,
+                                                location: job.location,
+                                                salary: "₹ \(job.ratePerDay)/day",
+                                                daysLeft: job.daysLeftText,
+                                                tag: job.jobType,
+                                                appliedCount: "\(applicationCount) applied"
+                                            )
+                                        }
+                                    }
+                                } catch {
+                                    print("⚠️ Failed to load profile image: \(error)")
+                                }
+                            }
+                        }
+                        
+                        // Set initial configuration with default image
+                        card.configure(
+                            image: UIImage(named: "avatar_placeholder"),
+                            title: job.title,
+                            company: productionHouse,
+                            location: job.location,
+                            salary: "₹ \(job.ratePerDay)/day",
+                            daysLeft: job.daysLeftText,
+                            tag: job.jobType,
+                            appliedCount: "\(applicationCount) applied"
+                        )
+                    }
+                }
+                
+                // Set initial bookmark state
+                let isBookmarked = BookmarkManager.shared.isBookmarked(job.id)
+                card.updateBookmark(isBookmarked: isBookmarked)
+                
+                // Set up card tap handler
+                card.onTap = { [weak self] in
+                    let detailVC = JobDetailsViewController()
+                    detailVC.job = job
+                    self?.navigationController?.pushViewController(detailVC, animated: true)
+                }
+                
+                // Set up apply button handler
+                card.onApplyTap = { [weak self] in
+                    let applyVC = ApplicationStartedViewController()
+                    applyVC.job = job
+                    self?.navigationController?.pushViewController(applyVC, animated: true)
+                }
+                
+                // Set up bookmark tap handler
+                card.onBookmarkTap = { [weak self] in
+                    let newState = BookmarkManager.shared.toggle(job.id)
+                    card.updateBookmark(isBookmarked: newState)
+                    
+                    // Sync to backend
+                    Task {
+                        do {
+                            try await JobsService.shared.toggleBookmark(jobId: job.id)
+                            print("✅ Bookmark synced to backend for job: \(job.title)")
+                        } catch {
+                            print("❌ Failed to sync bookmark: \(error)")
+                        }
+                    }
+                }
+                
+                self.jobListStack.addArrangedSubview(card)
+            }
         }
     }
     
@@ -308,21 +418,73 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         do {
             let jobs = try await JobsService.shared.fetchActiveJobs()
             
+            print("📋 Loaded \(jobs.count) active jobs")
+            for (index, job) in jobs.enumerated() {
+                print("   Job \(index + 1): '\(job.title)' - Location: '\(job.location)' - Company: '\(job.companyName)'")
+            }
+            
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
-                for job in jobs {
+                
+                // Store all jobs and initialize filtered jobs
+                self.allJobs = jobs
+                self.filteredJobs = jobs
+                
+                // Clear existing job cards
+                self.jobListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+                
+                for job in self.filteredJobs {
                     let card = JobCardView()
-
-                    card.configure(
-                        image: UIImage(named: "rani2"),
-                        title: job.title,
-                        company: job.companyName,
-                        location: job.location,
-                        salary: "₹ \(job.ratePerDay)/day",
-                        daysLeft: job.daysLeftText,
-                        tag: job.jobType,
-                        appliedCount: "0 applied" // replace later with real count
-                    )
+                    
+                    // Fetch production house data and application count
+                    Task {
+                        let (productionHouse, profilePictureUrl) = await self.fetchProductionHouse(directorId: job.directorId)
+                        let applicationCount = await self.fetchApplicationCount(jobId: job.id)
+                        
+                        await MainActor.run {
+                            // Load profile image asynchronously
+                            if let urlString = profilePictureUrl,
+                               let url = URL(string: urlString) {
+                                Task {
+                                    do {
+                                        let (data, _) = try await URLSession.shared.data(from: url)
+                                        if let image = UIImage(data: data) {
+                                            await MainActor.run {
+                                                card.configure(
+                                                    image: image,
+                                                    title: job.title,
+                                                    company: productionHouse,
+                                                    location: job.location,
+                                                    salary: "₹ \(job.ratePerDay)/day",
+                                                    daysLeft: job.daysLeftText,
+                                                    tag: job.jobType,
+                                                    appliedCount: "\(applicationCount) applied"
+                                                )
+                                            }
+                                        }
+                                    } catch {
+                                        print("⚠️ Failed to load profile image: \(error)")
+                                    }
+                                }
+                            }
+                            
+                            // Set initial configuration with default image
+                            card.configure(
+                                image: UIImage(named: "avatar_placeholder"),
+                                title: job.title,
+                                company: productionHouse,
+                                location: job.location,
+                                salary: "₹ \(job.ratePerDay)/day",
+                                daysLeft: job.daysLeftText,
+                                tag: job.jobType,
+                                appliedCount: "\(applicationCount) applied"
+                            )
+                        }
+                    }
+                    
+                    // Set initial bookmark state
+                    let isBookmarked = BookmarkManager.shared.isBookmarked(job.id)
+                    card.updateBookmark(isBookmarked: isBookmarked)
                     
                     // Set up card tap handler
                     card.onTap = { [weak self] in
@@ -330,12 +492,110 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
                         detailVC.job = job // Pass job data
                         self?.navigationController?.pushViewController(detailVC, animated: true)
                     }
+                    
+                    // Set up apply button handler
+                    card.onApplyTap = { [weak self] in
+                        let applyVC = ApplicationStartedViewController()
+                        applyVC.job = job // Pass job data
+                        self?.navigationController?.pushViewController(applyVC, animated: true)
+                    }
+                    
+                    // Set up bookmark tap handler
+                    card.onBookmarkTap = { [weak self] in
+                        let newState = BookmarkManager.shared.toggle(job.id)
+                        card.updateBookmark(isBookmarked: newState)
+                        
+                        // Sync to backend
+                        Task {
+                            do {
+                                try await JobsService.shared.toggleBookmark(jobId: job.id)
+                                print("✅ Bookmark synced to backend for job: \(job.title)")
+                            } catch {
+                                print("❌ Failed to sync bookmark: \(error)")
+                            }
+                        }
+                    }
 
                     self.jobListStack.addArrangedSubview(card)
                 }
             }
         } catch {
             print("Error loading jobs: \(error)")
+        }
+    }
+    
+    private func fetchProductionHouse(directorId: UUID) async -> (companyName: String, profilePictureUrl: String?) {
+        // Fetch company name from casting_profiles
+        var companyName = "Production House"
+        do {
+            struct CastingProfile: Codable {
+                let companyName: String?
+                
+                enum CodingKeys: String, CodingKey {
+                    case companyName = "company_name"
+                }
+            }
+            
+            let profile: CastingProfile = try await supabase
+                .from("casting_profiles")
+                .select("company_name")
+                .eq("id", value: directorId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            if let name = profile.companyName, !name.isEmpty {
+                companyName = name
+            }
+        } catch {
+            print("⚠️ Could not fetch company name: \(error)")
+        }
+        
+        // Fetch profile picture from profiles table
+        var profilePictureUrl: String?
+        do {
+            struct Profile: Codable {
+                let profilePictureUrl: String?
+                
+                enum CodingKeys: String, CodingKey {
+                    case profilePictureUrl = "profile_picture_url"
+                }
+            }
+            
+            let profile: Profile = try await supabase
+                .from("profiles")
+                .select("profile_picture_url")
+                .eq("id", value: directorId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            profilePictureUrl = profile.profilePictureUrl
+        } catch {
+            print("⚠️ Could not fetch profile picture: \(error)")
+        }
+        
+        print("✅ Fetched production house: '\(companyName)', Profile pic: \(profilePictureUrl != nil ? "Yes" : "No")")
+        return (companyName, profilePictureUrl)
+    }
+    
+    private func fetchApplicationCount(jobId: UUID) async -> Int {
+        do {
+            struct ApplicationCount: Codable {
+                let count: Int
+            }
+            
+            // Get count of applications for this job
+            let response = try await supabase
+                .from("applications")
+                .select("*", head: false, count: .exact)
+                .eq("job_id", value: jobId.uuidString)
+                .execute()
+            
+            return response.count ?? 0
+        } catch {
+            print("⚠️ Could not fetch application count for job \(jobId): \(error)")
+            return 0
         }
     }
 
@@ -401,6 +661,20 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         let vc = FilterScrollViewController()
         filterVC = vc
         
+        // Set up filter callback
+        vc.onFiltersApplied = { [weak self] role, position, project, earning in
+            self?.activeRoleFilter = role
+            self?.activePositionFilter = position
+            self?.activeProjectFilter = project
+            self?.activeEarningFilter = earning
+            
+            // Apply filters
+            self?.applyFilters()
+            
+            // Close filter sheet
+            self?.closeFilter()
+        }
+        
         dimView = UIView(frame: view.bounds)
         dimView.backgroundColor = UIColor.black.withAlphaComponent(0.0)
         view.addSubview(dimView)
@@ -438,16 +712,91 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         }
     }
     
+    // MARK: - Apply Filters
+    private func applyFilters() {
+        var filtered = allJobs
+        
+        // Apply role filter
+        if let role = activeRoleFilter {
+            filtered = filtered.filter { job in
+                job.jobType.lowercased().contains(role.lowercased())
+            }
+        }
+        
+        // Apply position filter  
+        if let position = activePositionFilter {
+            filtered = filtered.filter { job in
+                job.title.lowercased().contains(position.lowercased())
+            }
+        }
+        
+        // Apply project type filter
+        if let project = activeProjectFilter {
+            filtered = filtered.filter { job in
+                // Check if job description or title contains project type
+                job.title.lowercased().contains(project.lowercased()) ||
+                job.jobType.lowercased().contains(project.lowercased())
+            }
+        }
+        
+        // Apply earning filter
+        if let earning = activeEarningFilter, earning > 0 {
+            filtered = filtered.filter { job in
+                job.ratePerDay >= Int(earning)
+            }
+        }
+        
+        filteredJobs = filtered
+        reloadJobCards()
+    }
+    
     // Scroll fade header
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
     }
 }
 
-// MARK: - UISearchResultsUpdating
-extension jobsViewController: UISearchResultsUpdating {
-    func updateSearchResults(for searchController: UISearchController) {
-        guard let searchText = searchController.searchBar.text else { return }
-        // TODO: Implement search filtering logic here
-        print("Searching for: \(searchText)")
+// MARK: - UISearchBarDelegate
+extension jobsViewController: UISearchBarDelegate {
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        // Start with all jobs or apply existing filters first
+        var jobsToFilter = allJobs
+        
+        // Apply active filters first
+        if activeRoleFilter != nil || activePositionFilter != nil || activeProjectFilter != nil || activeEarningFilter != nil {
+            if let role = activeRoleFilter {
+                jobsToFilter = jobsToFilter.filter { $0.jobType.lowercased().contains(role.lowercased()) }
+            }
+            if let position = activePositionFilter {
+                jobsToFilter = jobsToFilter.filter { $0.title.lowercased().contains(position.lowercased()) }
+            }
+            if let project = activeProjectFilter {
+                jobsToFilter = jobsToFilter.filter { 
+                    $0.title.lowercased().contains(project.lowercased()) ||
+                    $0.jobType.lowercased().contains(project.lowercased())
+                }
+            }
+            if let earning = activeEarningFilter, earning > 0 {
+                jobsToFilter = jobsToFilter.filter { $0.ratePerDay >= Int(earning) }
+            }
+        }
+        
+        // Then apply search text filter
+        if searchText.isEmpty {
+            filteredJobs = jobsToFilter
+        } else {
+            filteredJobs = jobsToFilter.filter { job in
+                job.title.lowercased().contains(searchText.lowercased()) ||
+                job.companyName.lowercased().contains(searchText.lowercased()) ||
+                job.location.lowercased().contains(searchText.lowercased()) ||
+                job.jobType.lowercased().contains(searchText.lowercased())
+            }
+        }
+        
+        // Reload job cards with filtered results
+        reloadJobCards()
+    }
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        searchBar.resignFirstResponder()
     }
 }

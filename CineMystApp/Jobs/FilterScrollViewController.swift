@@ -8,7 +8,13 @@ class FilterScrollViewController: UIViewController {
     let headerLabel = UILabel()
 
     // Keep selection states
-    var selectedOption: String?
+    var selectedRolePreference: String?
+    var selectedPosition: String?
+    var selectedProjectType: String?
+    var selectedEarning: Float?
+    
+    // Callback to pass filters back
+    var onFiltersApplied: ((String?, String?, String?, Float?) -> Void)?
 
     // MARK: Data
     enum FilterCategory: Int, CaseIterable {
@@ -178,7 +184,16 @@ class FilterScrollViewController: UIViewController {
         guard let row = gesture.view as? UIStackView else { return }
 
         let label = row.arrangedSubviews[1] as! UILabel
-        selectedOption = label.text
+        let selectedText = label.text
+        
+        // Store selection based on current category
+        if roleOptions.contains(selectedText ?? "") {
+            selectedRolePreference = selectedText
+        } else if positionOptions.contains(selectedText ?? "") {
+            selectedPosition = selectedText
+        } else if projectOptions.contains(selectedText ?? "") {
+            selectedProjectType = selectedText
+        }
 
         clearAllCircles()
 
@@ -212,23 +227,44 @@ class FilterScrollViewController: UIViewController {
         titleLabel.text = "EXPECTED EARNING"
         titleLabel.font = .boldSystemFont(ofSize: 15)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        let valueLabel = UILabel()
+        valueLabel.text = "₹ 0"
+        valueLabel.font = .systemFont(ofSize: 14)
+        valueLabel.textAlignment = .right
+        valueLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let slider = UISlider()
         slider.minimumValue = 0
         slider.maximumValue = 100000
+        slider.value = selectedEarning ?? 0
+        slider.addTarget(self, action: #selector(sliderChanged(_:)), for: .valueChanged)
         slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.tag = 999 // To access later
 
         optionsContainer.addSubview(titleLabel)
+        optionsContainer.addSubview(valueLabel)
         optionsContainer.addSubview(slider)
 
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: optionsContainer.topAnchor, constant: 20),
             titleLabel.leadingAnchor.constraint(equalTo: optionsContainer.leadingAnchor, constant: 32),
+            
+            valueLabel.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            valueLabel.trailingAnchor.constraint(equalTo: optionsContainer.trailingAnchor, constant: -32),
 
             slider.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 20),
             slider.leadingAnchor.constraint(equalTo: optionsContainer.leadingAnchor, constant: 32),
             slider.trailingAnchor.constraint(equalTo: optionsContainer.trailingAnchor, constant: -32)
         ])
+    }
+    
+    @objc func sliderChanged(_ slider: UISlider) {
+        selectedEarning = slider.value
+        // Update value label
+        if let valueLabel = optionsContainer.subviews.first(where: { $0 is UILabel && $0 != optionsContainer.subviews.first }) as? UILabel {
+            valueLabel.text = "₹ \(Int(slider.value))"
+        }
     }
 
     // MARK: - BOTTOM BUTTONS
@@ -239,6 +275,7 @@ class FilterScrollViewController: UIViewController {
         clearButton.setTitleColor(.black, for: .normal)
         clearButton.backgroundColor = UIColor(white: 0.9, alpha: 1)
         clearButton.layer.cornerRadius = 10
+        clearButton.addTarget(self, action: #selector(clearFiltersTapped), for: .touchUpInside)
         clearButton.translatesAutoresizingMaskIntoConstraints = false
 
         let showButton = UIButton(type: .system)
@@ -268,10 +305,32 @@ class FilterScrollViewController: UIViewController {
         ])
     }
     @objc func showResultsTapped() {
+        // Call the callback with selected filters
+        onFiltersApplied?(selectedRolePreference, selectedPosition, selectedProjectType, selectedEarning)
+        
         if let nav = self.navigationController {
             nav.popViewController(animated: true)
         } else {
             self.dismiss(animated: true)
+        }
+    }
+    
+    @objc func clearFiltersTapped() {
+        // Clear all selections
+        selectedRolePreference = nil
+        selectedPosition = nil
+        selectedProjectType = nil
+        selectedEarning = nil
+        
+        // Clear UI
+        clearAllCircles()
+        
+        // Reset slider if visible
+        if let slider = optionsContainer.viewWithTag(999) as? UISlider {
+            slider.value = 0
+            if let valueLabel = optionsContainer.subviews.compactMap({ $0 as? UILabel }).last {
+                valueLabel.text = "₹ 0"
+            }
         }
     }
 

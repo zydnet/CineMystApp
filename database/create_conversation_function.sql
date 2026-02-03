@@ -14,7 +14,7 @@ CREATE OR REPLACE FUNCTION get_or_create_conversation(
 RETURNS conversations
 LANGUAGE plpgsql
 SECURITY DEFINER
-AS $$
+AS $function$
 DECLARE
     existing_conv conversations;
     new_conv conversations;
@@ -66,7 +66,7 @@ BEGIN
     
     RETURN new_conv;
 END;
-$$;
+$function$;
 
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION get_or_create_conversation(UUID, UUID) TO authenticated;

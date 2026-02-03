@@ -4,6 +4,7 @@ import Supabase
 // MARK: - Models
 struct ApplicationCard {
     let id: String
+    let actorId: UUID
     let name: String
     let location: String
     let timeAgo: String
@@ -52,8 +53,12 @@ class ApplicationsViewController: UIViewController {
         let tf = UITextField()
         tf.placeholder = "Search by name, location, or email..."
         tf.font = UIFont.systemFont(ofSize: 16)
-        tf.backgroundColor = UIColor(white: 0.95, alpha: 1.0)
-        tf.layer.cornerRadius = 12
+        tf.backgroundColor = .white
+        tf.layer.cornerRadius = 16
+        tf.layer.shadowColor = UIColor.black.cgColor
+        tf.layer.shadowOpacity = 0.08
+        tf.layer.shadowOffset = CGSize(width: 0, height: 2)
+        tf.layer.shadowRadius = 12
         tf.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 45, height: 50))
         tf.leftViewMode = .always
         tf.translatesAutoresizingMaskIntoConstraints = false
@@ -71,12 +76,14 @@ class ApplicationsViewController: UIViewController {
     private let filtersButton: UIButton = {
         let btn = UIButton()
         btn.setTitle(" Filters", for: .normal)
-        btn.setTitleColor(.black, for: .normal)
+        btn.setTitleColor(.label, for: .normal)
         btn.backgroundColor = .white
-        btn.layer.cornerRadius = 19
-        btn.layer.borderWidth = 1
-        btn.layer.borderColor = UIColor.lightGray.cgColor
-        btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+        btn.layer.cornerRadius = 20
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOpacity = 0.06
+        btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        btn.layer.shadowRadius = 8
+        btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
         btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 28, bottom: 0, right: 16)
         btn.translatesAutoresizingMaskIntoConstraints = false
         return btn
@@ -93,12 +100,14 @@ class ApplicationsViewController: UIViewController {
     private let topApplicantsButton: UIButton = {
         let btn = UIButton()
         btn.setTitle("Top Applicants ", for: .normal)
-        btn.setTitleColor(.black, for: .normal)
+        btn.setTitleColor(.label, for: .normal)
         btn.backgroundColor = .white
-        btn.layer.cornerRadius = 19
-        btn.layer.borderWidth = 1
-        btn.layer.borderColor = UIColor.lightGray.cgColor
-        btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+        btn.layer.cornerRadius = 20
+        btn.layer.shadowColor = UIColor.black.cgColor
+        btn.layer.shadowOpacity = 0.06
+        btn.layer.shadowOffset = CGSize(width: 0, height: 2)
+        btn.layer.shadowRadius = 8
+        btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .semibold)
         btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 14)
         btn.translatesAutoresizingMaskIntoConstraints = false
         return btn
@@ -117,9 +126,13 @@ class ApplicationsViewController: UIViewController {
         btn.setTitle("Filtered by AI", for: .normal)
         btn.setTitleColor(.white, for: .normal)
         btn.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1.0)
-        btn.layer.cornerRadius = 19
-        btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .medium)
-        btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 12, bottom: 0, right: 16)
+        btn.layer.cornerRadius = 20
+        btn.layer.shadowColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.3).cgColor
+        btn.layer.shadowOpacity = 0.3
+        btn.layer.shadowOffset = CGSize(width: 0, height: 4)
+        btn.layer.shadowRadius = 10
+        btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .bold)
+        btn.contentEdgeInsets = UIEdgeInsets(top: 0, left: 16, bottom: 0, right: 16)
         btn.translatesAutoresizingMaskIntoConstraints = false
         return btn
     }()
@@ -127,24 +140,26 @@ class ApplicationsViewController: UIViewController {
     private let countLabel: UILabel = {
         let lbl = UILabel()
         lbl.text = "25 applications"
-        lbl.font = UIFont.systemFont(ofSize: 18, weight: .semibold)
+        lbl.font = UIFont.systemFont(ofSize: 20, weight: .bold)
+        lbl.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
         lbl.translatesAutoresizingMaskIntoConstraints = false
         return lbl
     }()
     
     private let tableView: UITableView = {
         let tv = UITableView()
-        tv.backgroundColor = .white
-        tv.separatorStyle = .singleLine
-        tv.separatorInset = UIEdgeInsets(top: 0, left: 100, bottom: 0, right: 0)
+        tv.backgroundColor = .clear
+        tv.separatorStyle = .none
         tv.translatesAutoresizingMaskIntoConstraints = false
         tv.isScrollEnabled = false
+        tv.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: 20, right: 0)
         return tv
     }()
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = UIColor(red: 0.97, green: 0.97, blue: 0.98, alpha: 1.0)
         setupNavigationBar()
         setupUI()
         loadApplicationsForJob()
@@ -163,8 +178,9 @@ class ApplicationsViewController: UIViewController {
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
         appearance.backgroundColor = .white
+        appearance.shadowColor = .clear
         appearance.largeTitleTextAttributes = [
-            .foregroundColor: UIColor(red: 0.3, green: 0.1, blue: 0.3, alpha: 1.0),
+            .foregroundColor: UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1.0),
             .font: UIFont.systemFont(ofSize: 34, weight: .bold)
         ]
         
@@ -313,11 +329,20 @@ class ApplicationsViewController: UIViewController {
                     }
                 }
                 
-                // Convert to ApplicationCard
+                // Fetch user profiles
+                var userProfiles: [UUID: String] = [:]
+                for app in dbApplications {
+                    if let name = try? await self.fetchUserName(userId: app.actorId) {
+                        userProfiles[app.actorId] = name
+                    }
+                }
+                
+                // Convert to ApplicationCard with real names
                 self.applications = dbApplications.map { app in
                     ApplicationCard(
                         id: app.id.uuidString,
-                        name: "Applicant \(app.id.uuidString.prefix(8))",
+                        actorId: app.actorId,
+                        name: userProfiles[app.actorId] ?? "User \(app.actorId.uuidString.prefix(8))",
                         location: "India",
                         timeAgo: self.timeAgoString(from: app.appliedAt),
                         profileImage: "avatar_placeholder",
@@ -337,6 +362,35 @@ class ApplicationsViewController: UIViewController {
             } catch {
                 print("❌ Error loading applications: \(error)")
             }
+        }
+    }
+    
+    private func fetchUserName(userId: UUID) async throws -> String {
+        struct UserProfile: Codable {
+            let fullName: String?
+            let username: String?
+            
+            enum CodingKeys: String, CodingKey {
+                case fullName = "full_name"
+                case username
+            }
+        }
+        
+        do {
+            let profile: UserProfile = try await supabase
+                .from("profiles")
+                .select()
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            let name = profile.fullName ?? profile.username ?? "User \(userId.uuidString.prefix(8))"
+            print("✅ Fetched user \(userId.uuidString.prefix(8)): \(name)")
+            return name
+        } catch {
+            print("⚠️ Could not fetch profile for \(userId.uuidString.prefix(8)): \(error)")
+            return "User \(userId.uuidString.prefix(8))"
         }
     }
     
@@ -418,6 +472,106 @@ class ApplicationsViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
     }
+    
+    // MARK: - Navigation
+    
+    private func navigateToPortfolio(actorId: UUID) {
+        print("🎭 Navigating to portfolio for actor: \(actorId.uuidString)")
+        
+        // Fetch actor's portfolio and navigate
+        Task {
+            do {
+                struct ActorPortfolio: Codable {
+                    let id: String
+                    let userId: String
+                    
+                    enum CodingKeys: String, CodingKey {
+                        case id
+                        case userId = "user_id"
+                    }
+                }
+                
+                let portfolio: ActorPortfolio = try await supabase
+                    .from("actor_portfolios")
+                    .select("id, user_id")
+                    .eq("user_id", value: actorId.uuidString)
+                    .single()
+                    .execute()
+                    .value
+                
+                await MainActor.run {
+                    let portfolioVC = PortfolioViewController()
+                    portfolioVC.isOwnProfile = false
+                    portfolioVC.portfolioId = portfolio.id
+                    self.navigationController?.pushViewController(portfolioVC, animated: true)
+                }
+            } catch {
+                print("❌ Error loading portfolio: \(error)")
+                await MainActor.run {
+                    let alert = UIAlertController(
+                        title: "Portfolio Not Found",
+                        message: "This user hasn't created a portfolio yet.",
+                        preferredStyle: .alert
+                    )
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
+        }
+    }
+    
+    private func viewSubmittedTask(applicationId: String) {
+        print("📹 Viewing task submission for application: \(applicationId)")
+        
+        guard let appUUID = UUID(uuidString: applicationId) else {
+            print("❌ Invalid application ID")
+            return
+        }
+        
+        // Fetch task submission
+        Task {
+            do {
+                let submissions: [TaskSubmission] = try await supabase
+                    .from("task_submissions")
+                    .select()
+                    .eq("application_id", value: appUUID.uuidString)
+                    .order("submitted_at", ascending: false)
+                    .execute()
+                    .value
+                
+                guard let latestSubmission = submissions.first else {
+                    await MainActor.run {
+                        let alert = UIAlertController(
+                            title: "No Submission",
+                            message: "Task submission not found.",
+                            preferredStyle: .alert
+                        )
+                        alert.addAction(UIAlertAction(title: "OK", style: .default))
+                        self.present(alert, animated: true)
+                    }
+                    return
+                }
+                
+                await MainActor.run {
+                    let videoVC = TaskVideoPlayerViewController()
+                    videoVC.videoURL = latestSubmission.submissionUrl
+                    videoVC.actorNotes = latestSubmission.actorNotes
+                    self.navigationController?.pushViewController(videoVC, animated: true)
+                }
+            } catch {
+                print("❌ Error loading task submission: \(error)")
+                await MainActor.run {
+                    let alert = UIAlertController(
+                        title: "Error",
+                        message: "Could not load task submission.",
+                        preferredStyle: .alert
+                    )
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
+        }
+    }
 }
 
 // MARK: - UITableViewDelegate, UITableViewDataSource
@@ -428,8 +582,21 @@ extension ApplicationsViewController: UITableViewDelegate, UITableViewDataSource
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "ApplicationCell", for: indexPath) as! ApplicationCell
-              let application = filteredApplications[indexPath.row]  // Still works
-              cell.configure(with: application)
+        let application = filteredApplications[indexPath.row]
+        cell.configure(with: application)
+        
+        // Portfolio tap action
+        cell.portfolioTapAction = { [weak self] in
+            self?.navigateToPortfolio(actorId: application.actorId)
+        }
+        
+        // Task tap action
+        cell.taskTapAction = { [weak self] in
+            if application.hasSubmittedTask {
+                self?.viewSubmittedTask(applicationId: application.id)
+            }
+        }
+        
         cell.shortlistAction = { [weak self] in
             self?.toggleShortlist(at: indexPath)
         }
@@ -437,7 +604,7 @@ extension ApplicationsViewController: UITableViewDelegate, UITableViewDataSource
     }
     
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return 100   // 🔥 Smaller cell
+        return 120
     }
     
     private func toggleShortlist(at indexPath: IndexPath) {
@@ -503,13 +670,25 @@ extension ApplicationsViewController: UITableViewDelegate, UITableViewDataSource
             )
             
             // Update in database
-            let _: Application = try await supabase
+            print("📤 Sending UPDATE to database for app: \(appUUID.uuidString)")
+            try await supabase
                 .from("applications")
                 .update(updatedApp)
-                .eq("id", value: applicationId)
+                .eq("id", value: appUUID.uuidString)
+                .execute()
+            
+            print("✅ Database UPDATE completed")
+            
+            // Verify the update by fetching the record back
+            let verifyApp: Application = try await supabase
+                .from("applications")
+                .select()
+                .eq("id", value: appUUID.uuidString)
                 .single()
                 .execute()
                 .value
+            
+            print("🔍 Verification fetch: App \(verifyApp.id.uuidString.prefix(8)) status = \(verifyApp.status.rawValue)")
             
             // Update local cache
             dbApplicationsRaw[appIndex] = updatedApp
@@ -603,11 +782,14 @@ extension ApplicationsViewController: UITableViewDelegate, UITableViewDataSource
         }
     }
 }
+
 import UIKit
 
 class ApplicationCell: UITableViewCell {
     
     var shortlistAction: (() -> Void)?
+    var portfolioTapAction: (() -> Void)?
+    var taskTapAction: (() -> Void)?
     
     private var taskLeadingWithConnected: NSLayoutConstraint!
     private var taskLeadingWithoutConnected: NSLayoutConstraint!
@@ -616,27 +798,43 @@ class ApplicationCell: UITableViewCell {
     
     // MARK: - UI Components
     
+    private let cardContainerView: UIView = {
+        let view = UIView()
+        view.backgroundColor = .white
+        view.layer.cornerRadius = 20
+        view.layer.shadowColor = UIColor.black.cgColor
+        view.layer.shadowOpacity = 0.08
+        view.layer.shadowOffset = CGSize(width: 0, height: 4)
+        view.layer.shadowRadius = 12
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+    
     private let profileImageView: UIImageView = {
         let iv = UIImageView()
         iv.contentMode = .scaleAspectFill
         iv.clipsToBounds = true
-        iv.layer.cornerRadius = 30
+        iv.layer.cornerRadius = 32
+        iv.layer.borderWidth = 3
+        iv.layer.borderColor = UIColor(red: 0.95, green: 0.95, blue: 0.97, alpha: 1.0).cgColor
         iv.translatesAutoresizingMaskIntoConstraints = false
         return iv
     }()
     
     private let nameLabel: UILabel = {
         let lbl = UILabel()
-        lbl.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        lbl.font = UIFont.systemFont(ofSize: 18, weight: .bold)
+        lbl.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
         lbl.translatesAutoresizingMaskIntoConstraints = false
         return lbl
     }()
     
     private let portfolioLabel: UILabel = {
         let lbl = UILabel()
-        lbl.text = "Portfolio"
-        lbl.font = UIFont.systemFont(ofSize: 15)
-        lbl.textColor = UIColor.systemBlue
+        lbl.text = "View Portfolio"
+        lbl.font = UIFont.systemFont(ofSize: 14, weight: .medium)
+        lbl.textColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1.0)
+        lbl.isUserInteractionEnabled = true
         lbl.translatesAutoresizingMaskIntoConstraints = false
         return lbl
     }()
@@ -675,8 +873,8 @@ class ApplicationCell: UITableViewCell {
     
     private let connectedBadge: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor(red: 0.9, green: 0.85, blue: 1.0, alpha: 1.0)
-        view.layer.cornerRadius = 10
+        view.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.12)
+        view.layer.cornerRadius = 12
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -684,16 +882,16 @@ class ApplicationCell: UITableViewCell {
     private let connectedLabel: UILabel = {
         let lbl = UILabel()
         lbl.text = "Connected"
-        lbl.font = UIFont.systemFont(ofSize: 12, weight: .medium)
-        lbl.textColor = UIColor(red: 0.5, green: 0.2, blue: 0.8, alpha: 1.0)
+        lbl.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
+        lbl.textColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1.0)
         lbl.translatesAutoresizingMaskIntoConstraints = false
         return lbl
     }()
     
     private let taskBadge: UIView = {
         let view = UIView()
-        view.backgroundColor = UIColor(red: 0.85, green: 0.98, blue: 0.9, alpha: 1.0)
-        view.layer.cornerRadius = 10
+        view.backgroundColor = UIColor(red: 0.2, green: 0.78, blue: 0.35, alpha: 0.15)
+        view.layer.cornerRadius = 12
         view.translatesAutoresizingMaskIntoConstraints = false
         return view
     }()
@@ -701,8 +899,8 @@ class ApplicationCell: UITableViewCell {
     private let taskLabel: UILabel = {
         let lbl = UILabel()
         lbl.text = "Task Submitted"
-        lbl.font = UIFont.systemFont(ofSize: 12, weight: .medium)
-        lbl.textColor = UIColor(red: 0.0, green: 0.7, blue: 0.3, alpha: 1.0)
+        lbl.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
+        lbl.textColor = UIColor(red: 0.15, green: 0.68, blue: 0.38, alpha: 1.0)
         lbl.translatesAutoresizingMaskIntoConstraints = false
         return lbl
     }()
@@ -713,23 +911,23 @@ class ApplicationCell: UITableViewCell {
     private let shortlistButton: UIButton = {
         let btn = UIButton()
         btn.backgroundColor = .white
-        btn.layer.cornerRadius = 20
+        btn.layer.cornerRadius = 24
         btn.translatesAutoresizingMaskIntoConstraints = false
         
-        // Glow shadow identical to screenshot
-        btn.layer.shadowColor = UIColor(red: 0.5, green: 0.2, blue: 0.8, alpha: 0.3).cgColor
-        btn.layer.shadowOpacity = 0.25
-        btn.layer.shadowOffset = CGSize(width: 0, height: 3)
-        btn.layer.shadowRadius = 8
+        // Modern shadow
+        btn.layer.shadowColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 0.3).cgColor
+        btn.layer.shadowOpacity = 0.2
+        btn.layer.shadowOffset = CGSize(width: 0, height: 4)
+        btn.layer.shadowRadius = 10
         
         return btn
     }()
     
     private let checkmarkIcon: UIImageView = {
         let iv = UIImageView()
-        let config = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+        let config = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
         iv.image = UIImage(systemName: "checkmark", withConfiguration: config)
-        iv.tintColor = UIColor(red: 0.5, green: 0.2, blue: 0.8, alpha: 1.0)
+        iv.tintColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1.0)
         iv.translatesAutoresizingMaskIntoConstraints = false
         return iv
     }()
@@ -751,31 +949,51 @@ class ApplicationCell: UITableViewCell {
     
     private func setupCell() {
         selectionStyle = .none
+        backgroundColor = .clear
         
-        contentView.addSubview(profileImageView)
-        contentView.addSubview(nameLabel)
-        contentView.addSubview(portfolioLabel)
-        contentView.addSubview(locationIcon)
-        contentView.addSubview(locationLabel)
-        contentView.addSubview(timeIcon)
-        contentView.addSubview(timeLabel)
+        // Add card container first
+        contentView.addSubview(cardContainerView)
         
-        contentView.addSubview(connectedBadge)
+        // Add all subviews to card container
+        cardContainerView.addSubview(profileImageView)
+        cardContainerView.addSubview(nameLabel)
+        cardContainerView.addSubview(portfolioLabel)
+        cardContainerView.addSubview(locationIcon)
+        cardContainerView.addSubview(locationLabel)
+        cardContainerView.addSubview(timeIcon)
+        cardContainerView.addSubview(timeLabel)
+        
+        cardContainerView.addSubview(connectedBadge)
         connectedBadge.addSubview(connectedLabel)
         
-        contentView.addSubview(taskBadge)
+        cardContainerView.addSubview(taskBadge)
         taskBadge.addSubview(taskLabel)
         
-        contentView.addSubview(shortlistButton)
+        cardContainerView.addSubview(shortlistButton)
         shortlistButton.addSubview(checkmarkIcon)
         shortlistButton.addTarget(self, action: #selector(shortlistTapped), for: .touchUpInside)
         
+        // Add tap gestures
+        let portfolioTap = UITapGestureRecognizer(target: self, action: #selector(portfolioTapped))
+        portfolioLabel.addGestureRecognizer(portfolioTap)
+        
+        let taskTap = UITapGestureRecognizer(target: self, action: #selector(taskBadgeTapped))
+        taskBadge.addGestureRecognizer(taskTap)
+        taskBadge.isUserInteractionEnabled = true
+        
         
         NSLayoutConstraint.activate([
-            profileImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 14),
-            profileImageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            profileImageView.widthAnchor.constraint(equalToConstant: 60),
-            profileImageView.heightAnchor.constraint(equalToConstant: 60),
+            // Card container constraints
+            cardContainerView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            cardContainerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            cardContainerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            cardContainerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8),
+            
+            // Profile image - larger and more prominent
+            profileImageView.leadingAnchor.constraint(equalTo: cardContainerView.leadingAnchor, constant: 16),
+            profileImageView.centerYAnchor.constraint(equalTo: cardContainerView.centerYAnchor),
+            profileImageView.widthAnchor.constraint(equalToConstant: 64),
+            profileImageView.heightAnchor.constraint(equalToConstant: 64),
             
             nameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
             nameLabel.leadingAnchor.constraint(equalTo: profileImageView.trailingAnchor, constant: 10),
@@ -801,36 +1019,34 @@ class ApplicationCell: UITableViewCell {
             
             
             // Connected badge
-            connectedBadge.topAnchor.constraint(equalTo: locationIcon.bottomAnchor, constant: 6),
+            connectedBadge.topAnchor.constraint(equalTo: locationIcon.bottomAnchor, constant: 8),
             connectedBadge.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
-            connectedBadge.heightAnchor.constraint(equalToConstant: 20),
+            connectedBadge.heightAnchor.constraint(equalToConstant: 24),
             
-            connectedLabel.topAnchor.constraint(equalTo: connectedBadge.topAnchor, constant: 2),
-            connectedLabel.bottomAnchor.constraint(equalTo: connectedBadge.bottomAnchor, constant: -2),
-            connectedLabel.leadingAnchor.constraint(equalTo: connectedBadge.leadingAnchor, constant: 8),
-            connectedLabel.trailingAnchor.constraint(equalTo: connectedBadge.trailingAnchor, constant: -8),
+            connectedLabel.centerYAnchor.constraint(equalTo: connectedBadge.centerYAnchor),
+            connectedLabel.leadingAnchor.constraint(equalTo: connectedBadge.leadingAnchor, constant: 10),
+            connectedLabel.trailingAnchor.constraint(equalTo: connectedBadge.trailingAnchor, constant: -10),
             
             
             // Task badge
-            taskBadge.topAnchor.constraint(equalTo: locationIcon.bottomAnchor, constant: 6),
-            taskBadge.heightAnchor.constraint(equalToConstant: 20),
+            taskBadge.topAnchor.constraint(equalTo: locationIcon.bottomAnchor, constant: 8),
+            taskBadge.heightAnchor.constraint(equalToConstant: 24),
             
-            taskLabel.topAnchor.constraint(equalTo: taskBadge.topAnchor, constant: 2),
-            taskLabel.bottomAnchor.constraint(equalTo: taskBadge.bottomAnchor, constant: -2),
-            taskLabel.leadingAnchor.constraint(equalTo: taskBadge.leadingAnchor, constant: 8),
-            taskLabel.trailingAnchor.constraint(equalTo: taskBadge.trailingAnchor, constant: -8),
+            taskLabel.centerYAnchor.constraint(equalTo: taskBadge.centerYAnchor),
+            taskLabel.leadingAnchor.constraint(equalTo: taskBadge.leadingAnchor, constant: 10),
+            taskLabel.trailingAnchor.constraint(equalTo: taskBadge.trailingAnchor, constant: -10),
             
             
-            // Shortlist Button
-            shortlistButton.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            shortlistButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
-            shortlistButton.widthAnchor.constraint(equalToConstant: 40),
-            shortlistButton.heightAnchor.constraint(equalToConstant: 40),
+            // Shortlist Button - modern floating style
+            shortlistButton.centerYAnchor.constraint(equalTo: cardContainerView.centerYAnchor),
+            shortlistButton.trailingAnchor.constraint(equalTo: cardContainerView.trailingAnchor, constant: -16),
+            shortlistButton.widthAnchor.constraint(equalToConstant: 48),
+            shortlistButton.heightAnchor.constraint(equalToConstant: 48),
             
             checkmarkIcon.centerXAnchor.constraint(equalTo: shortlistButton.centerXAnchor),
             checkmarkIcon.centerYAnchor.constraint(equalTo: shortlistButton.centerYAnchor),
-            checkmarkIcon.widthAnchor.constraint(equalToConstant: 18),
-            checkmarkIcon.heightAnchor.constraint(equalToConstant: 18)
+            checkmarkIcon.widthAnchor.constraint(equalToConstant: 16),
+            checkmarkIcon.heightAnchor.constraint(equalToConstant: 16)
         ])
         
         
@@ -857,6 +1073,9 @@ class ApplicationCell: UITableViewCell {
         // Connected badge visibility
         connectedBadge.isHidden = !application.isConnected
         
+        // Task badge visibility
+        taskBadge.isHidden = !application.hasSubmittedTask
+        
         if application.isConnected {
             taskLeadingWithoutConnected.isActive = false
             taskLeadingWithConnected.isActive = true
@@ -881,5 +1100,13 @@ class ApplicationCell: UITableViewCell {
     
     @objc private func shortlistTapped() {
         shortlistAction?()
+    }
+    
+    @objc private func portfolioTapped() {
+        portfolioTapAction?()
+    }
+    
+    @objc private func taskBadgeTapped() {
+        taskTapAction?()
     }
 }

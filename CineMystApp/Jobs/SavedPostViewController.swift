@@ -4,15 +4,21 @@ class SavedPostViewController: UIViewController {
 
     private let scrollView = UIScrollView()
     private let contentView = UIStackView()
+    
+    private var bookmarkedJobs: [Job] = []
 
     override func viewDidLoad() {
         super.viewDidLoad()
         
         view.backgroundColor = .white
-        title = "Saved Jobs"   // ← MOVED TITLE TO NAV BAR
+        title = "Saved Jobs"
         
         setupNavigationBar()
         setupScrollView()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
         loadSavedJobCards()
     }
 
@@ -57,37 +63,129 @@ class SavedPostViewController: UIViewController {
         ])
     }
 
-    // MARK: - Load JobCardView from Model
+    // MARK: - Load JobCardView from Backend
     private func loadSavedJobCards() {
-
-        // Example saved jobs list → replace with your actual data array
-        let savedJobs: [(title: String, company: String, location: String, salary: String, daysLeft: String, tag: String)] = [
-            ("Lead Actor - Drama Series “City of Dreams”", "YRF Casting", "Mumbai, India", "₹ 5k/day", "2 days left", "Web Series"),
-            ("Assistant Director - Feature Film", "Red Chillies Entertainment", "Delhi, India", "₹ 8k/day", "5 days left", "Feature Film")
-        ]
-
-        for job in savedJobs {
+        // Clear existing cards
+        contentView.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        
+        // Get bookmarked job IDs from local storage
+        let bookmarkedIDs = BookmarkManager.shared.allBookmarkedIDs()
+        
+        guard !bookmarkedIDs.isEmpty else {
+            showEmptyState()
+            return
+        }
+        
+        // Load jobs from backend
+        Task {
+            do {
+                let jobs = try await JobsService.shared.fetchJobsByIds(jobIds: bookmarkedIDs)
+                self.bookmarkedJobs = jobs
+                
+                await MainActor.run {
+                    self.displayJobCards()
+                }
+            } catch {
+                print("❌ Error loading bookmarked jobs: \(error)")
+                await MainActor.run {
+                    self.showErrorState()
+                }
+            }
+        }
+    }
+    
+    private func displayJobCards() {
+        for job in bookmarkedJobs {
             let card = JobCardView()
             card.translatesAutoresizingMaskIntoConstraints = false
 
             card.configure(
                 image: UIImage(named: "rani2"),
                 title: job.title,
-                company: job.company,
+                company: job.companyName,
                 location: job.location,
-                salary: job.salary,
-                daysLeft: job.daysLeft,
-                tag: job.tag,
-                appliedCount: "Applied 3 days ago"
+                salary: "₹ \(job.ratePerDay)/day",
+                daysLeft: job.daysLeftText,
+                tag: job.jobType,
+                appliedCount: "0 applied"
             )
-
-            // Optional: Add actions
-            card.onTap = { print("Card tapped") }
-            card.onApplyTap = { print("Apply tapped") }
-            card.onBookmarkTap = { print("Bookmark tapped") }
+            
+            // Set bookmark state
+            card.updateBookmark(isBookmarked: true)
+            
+            // Card tap - open job details
+            card.onTap = { [weak self] in
+                let detailVC = JobDetailsViewController()
+                detailVC.job = job
+                self?.navigationController?.pushViewController(detailVC, animated: true)
+            }
+            
+            // Bookmark tap - remove from saved
+            card.onBookmarkTap = { [weak self] in
+                let newState = BookmarkManager.shared.toggle(job.id)
+                card.updateBookmark(isBookmarked: newState)
+                
+                // Remove card from view if unbookmarked
+                if !newState {
+                    UIView.animate(withDuration: 0.3, animations: {
+                        card.alpha = 0
+                        card.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+                    }) { _ in
+                        self?.contentView.removeArrangedSubview(card)
+                        card.removeFromSuperview()
+                        
+                        // Show empty state if no more cards
+                        if self?.contentView.arrangedSubviews.isEmpty == true {
+                            self?.showEmptyState()
+                        }
+                    }
+                }
+                
+                // Sync to backend
+                Task {
+                    do {
+                        try await JobsService.shared.toggleBookmark(jobId: job.id)
+                        print("✅ Bookmark removed from backend for job: \(job.title)")
+                    } catch {
+                        print("❌ Failed to sync bookmark removal: \(error)")
+                    }
+                }
+            }
 
             contentView.addArrangedSubview(card)
         }
+    }
+    
+    private func showEmptyState() {
+        let emptyLabel = UILabel()
+        emptyLabel.text = "No saved jobs yet\nBookmark jobs to see them here"
+        emptyLabel.textAlignment = .center
+        emptyLabel.numberOfLines = 0
+        emptyLabel.font = UIFont.systemFont(ofSize: 16)
+        emptyLabel.textColor = .secondaryLabel
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        contentView.addArrangedSubview(emptyLabel)
+        
+        NSLayoutConstraint.activate([
+            emptyLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor)
+        ])
+    }
+    
+    private func showErrorState() {
+        let errorLabel = UILabel()
+        errorLabel.text = "Failed to load saved jobs\nPlease try again"
+        errorLabel.textAlignment = .center
+        errorLabel.numberOfLines = 0
+        errorLabel.font = UIFont.systemFont(ofSize: 16)
+        errorLabel.textColor = .systemRed
+        errorLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        contentView.addArrangedSubview(errorLabel)
+        
+        NSLayoutConstraint.activate([
+            errorLabel.centerYAnchor.constraint(equalTo: scrollView.centerYAnchor)
+        ])
     }
 }
 
