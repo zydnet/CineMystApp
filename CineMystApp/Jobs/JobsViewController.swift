@@ -4,10 +4,10 @@ import Supabase
 // MARK: - Colors & Helpers
 fileprivate extension UIColor {
     static let themePlum = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
-    static let softGrayBg = UIColor(red: 247/255, green: 245/255, blue: 247/255, alpha: 1)
+    static let softGrayBg = UIColor.systemGroupedBackground
 }
 
-fileprivate func makeShadow(on view: UIView, radius: CGFloat = 6, yOffset: CGFloat = 4, opacity: Float = 0.12) {
+fileprivate func makeShadow(on view: UIView, radius: CGFloat = 8, yOffset: CGFloat = 2, opacity: Float = 0.08) {
     view.layer.shadowColor = UIColor.black.cgColor
     view.layer.shadowOpacity = opacity
     view.layer.shadowRadius = radius
@@ -31,31 +31,36 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     // Title bar
     private let titleLabel: UILabel = {
         let l = UILabel()
-        l.text = "Explore jobs"
-        l.font = UIFont.boldSystemFont(ofSize: 34)
+        l.text = "Explore Jobs"
+        l.font = UIFont.systemFont(ofSize: 28, weight: .bold)
+        l.textColor = .label
         return l
     }()
     private let subtitleLabel: UILabel = {
         let l = UILabel()
         l.text = "Discover your next role"
-        l.font = UIFont.systemFont(ofSize: 14)
-        l.textColor = UIColor.systemGray
+        l.font = UIFont.systemFont(ofSize: 15)
+        l.textColor = .secondaryLabel
         return l
     }()
     private lazy var bookmarkButton: UIButton = {
         let btn = UIButton(type: .system)
-        btn.setImage(UIImage(systemName: "bookmark"), for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
+        btn.setImage(UIImage(systemName: "bookmark", withConfiguration: config), for: .normal)
+        btn.tintColor = .label
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.widthAnchor.constraint(equalToConstant: 26).isActive = true
-        btn.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        btn.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        btn.heightAnchor.constraint(equalToConstant: 44).isActive = true
         return btn
     }()
     private lazy var filterButton: UIButton = {
         let btn = UIButton(type: .system)
-        btn.setImage(UIImage(systemName: "line.3.horizontal.decrease"), for: .normal)
+        let config = UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)
+        btn.setImage(UIImage(systemName: "line.3.horizontal.decrease.circle", withConfiguration: config), for: .normal)
+        btn.tintColor = .label
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.widthAnchor.constraint(equalToConstant: 26).isActive = true
-        btn.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        btn.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        btn.heightAnchor.constraint(equalToConstant: 44).isActive = true
         return btn
     }()
     
@@ -74,15 +79,16 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     // Curated header
     private let curatedLabel: UILabel = {
         let l = UILabel()
-        l.text = "Curated for you"
-        l.font = UIFont.boldSystemFont(ofSize: 22)
+        l.text = "Curated for You"
+        l.font = UIFont.systemFont(ofSize: 20, weight: .semibold)
+        l.textColor = .label
         return l
     }()
     private let curatedSubtitle: UILabel = {
         let l = UILabel()
-        l.text = "Opportunities that match your expertise and aspirations"
-        l.font = UIFont.systemFont(ofSize: 13)
-        l.textColor = .systemGray
+        l.text = "Opportunities that match your profile"
+        l.font = UIFont.systemFont(ofSize: 15)
+        l.textColor = .secondaryLabel
         l.numberOfLines = 2
         return l
     }()
@@ -91,7 +97,7 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     private let jobListStack: UIStackView = {
         let s = UIStackView()
         s.axis = .vertical
-        s.spacing = 16
+        s.spacing = 12
         return s
     }()
     
@@ -102,8 +108,7 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .systemBackground
-        applyTheme()
+        view.backgroundColor = .white
         
         setupSearchController()
         setupScrollView()
@@ -123,21 +128,14 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         reloadJobCards()
     }
     
-    private func applyTheme() {
-        titleLabel.textColor = themeColor
-        curatedLabel.textColor = themeColor
-        bookmarkButton.tintColor = .black
-        filterButton.tintColor = .black
-    }
-    
     // MARK: - Search Controller Setup
     private func setupSearchController() {
         searchController.searchResultsUpdater = self
         searchController.obscuresBackgroundDuringPresentation = false
-        searchController.searchBar.placeholder = "Search opportunities"
-        searchController.searchBar.tintColor = themeColor
+        searchController.searchBar.placeholder = "Search jobs"
         searchController.searchBar.searchBarStyle = .minimal
         searchController.hidesNavigationBarDuringPresentation = false
+        searchController.searchBar.backgroundColor = .clear
         definesPresentationContext = true
     }
     
@@ -147,6 +145,7 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         scrollView.delegate = self
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.alwaysBounceVertical = true
+        scrollView.backgroundColor = .clear
         
         scrollView.addSubview(contentView)
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -170,7 +169,7 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         let titleBar = UIStackView(arrangedSubviews: [titleLabel, UIView(), bookmarkButton, filterButton])
         titleBar.axis = .horizontal
         titleBar.alignment = .center
-        titleBar.spacing = 12
+        titleBar.spacing = 4
         titleBar.translatesAutoresizingMaskIntoConstraints = false
         
         contentView.addSubview(titleBar)
@@ -179,13 +178,13 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            titleBar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            titleBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            titleBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            titleBar.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            titleBar.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            titleBar.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             
-            subtitleLabel.topAnchor.constraint(equalTo: titleBar.bottomAnchor, constant: 6),
+            subtitleLabel.topAnchor.constraint(equalTo: titleBar.bottomAnchor, constant: 4),
             subtitleLabel.leadingAnchor.constraint(equalTo: titleBar.leadingAnchor),
-            subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20)
+            subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -16)
         ])
     }
     
@@ -199,9 +198,9 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         searchController.searchBar.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            searchBarContainer.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 16),
-            searchBarContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
-            searchBarContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            searchBarContainer.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
+            searchBarContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            searchBarContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
             
             searchController.searchBar.topAnchor.constraint(equalTo: searchBarContainer.topAnchor),
             searchController.searchBar.leadingAnchor.constraint(equalTo: searchBarContainer.leadingAnchor),
@@ -216,29 +215,27 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
         postButtonsStack.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            postButtonsStack.topAnchor.constraint(equalTo: searchBarContainer.bottomAnchor, constant: 18),
-            postButtonsStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            postButtonsStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            postButtonsStack.heightAnchor.constraint(equalToConstant: 42)
+            postButtonsStack.topAnchor.constraint(equalTo: searchBarContainer.bottomAnchor, constant: 16),
+            postButtonsStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            postButtonsStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            postButtonsStack.heightAnchor.constraint(equalToConstant: 44)
         ])
         
-        let titles = ["Post a job", "My Jobs", "Posted"]
+        let titles = ["Post Job", "My Jobs", "Posted"]
         for t in titles {
             let btn = UIButton(type: .system)
             btn.setTitle(t, for: .normal)
-            btn.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
-            btn.setTitleColor(.black, for: .normal)
-            btn.layer.cornerRadius = 12
-            btn.backgroundColor = .white
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 15, weight: .medium)
+            btn.setTitleColor(.label, for: .normal)
+            btn.layer.cornerRadius = 10
+            btn.backgroundColor = .systemBackground
+            btn.layer.borderWidth = 1
+            btn.layer.borderColor = UIColor.separator.cgColor
             
-            btn.contentEdgeInsets = UIEdgeInsets(top: 16, left: 18, bottom: 16, right: 18)
-            // shadow
-            makeShadow(on: btn, radius: 6, yOffset: 4, opacity: 0.12)
-            btn.layer.borderWidth = 0.3
-            btn.layer.borderColor = UIColor.systemGray4.cgColor
+            makeShadow(on: btn)
             
             switch t {
-            case "Post a job": btn.addTarget(self, action: #selector(postJobTapped), for: .touchUpInside)
+            case "Post Job": btn.addTarget(self, action: #selector(postJobTapped), for: .touchUpInside)
             case "My Jobs": btn.addTarget(self, action: #selector(myJobsTapped), for: .touchUpInside)
             case "Posted": btn.addTarget(self, action: #selector(didTapPosted), for: .touchUpInside)
             default: break
@@ -255,17 +252,28 @@ final class jobsViewController: UIViewController, UIScrollViewDelegate {
             contentView.addSubview($0)
         }
         
+        // Add separator line
+        let separator = UIView()
+        separator.backgroundColor = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(separator)
+        
         NSLayoutConstraint.activate([
-            curatedLabel.topAnchor.constraint(equalTo: postButtonsStack.bottomAnchor, constant: 34),
-            curatedLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            curatedLabel.topAnchor.constraint(equalTo: postButtonsStack.bottomAnchor, constant: 32),
+            curatedLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             
-            curatedSubtitle.topAnchor.constraint(equalTo: curatedLabel.bottomAnchor, constant: 6),
+            curatedSubtitle.topAnchor.constraint(equalTo: curatedLabel.bottomAnchor, constant: 4),
             curatedSubtitle.leadingAnchor.constraint(equalTo: curatedLabel.leadingAnchor),
-            curatedSubtitle.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            curatedSubtitle.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             
-            jobListStack.topAnchor.constraint(equalTo: curatedSubtitle.bottomAnchor, constant: 30),
-            jobListStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            jobListStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            separator.topAnchor.constraint(equalTo: curatedSubtitle.bottomAnchor, constant: 16),
+            separator.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            separator.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            separator.heightAnchor.constraint(equalToConstant: 0.5),
+            
+            jobListStack.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 16),
+            jobListStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            jobListStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
         ])
     }
     

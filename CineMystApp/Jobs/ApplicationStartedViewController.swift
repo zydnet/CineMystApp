@@ -212,11 +212,12 @@ class ApplicationStartedViewController: UIViewController {
                     updatedAt: Date()
                 )
                 
-                let _: Application = try await supabase
+                // Update without .single() and expect array response
+                let _: [Application] = try await supabase
                     .from("applications")
                     .update(updatedApplication)
                     .eq("id", value: existingApp.id.uuidString)
-                    .single()
+                    .select()
                     .execute()
                     .value
                 

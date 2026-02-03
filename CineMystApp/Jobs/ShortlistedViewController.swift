@@ -7,6 +7,7 @@ import Supabase
 
 // MARK: - Model
 struct ShortlistedCandidate {
+    let actorId: UUID
     let name: String
     let experience: String
     let location: String
@@ -96,6 +97,8 @@ final class ShortlistedCell: UITableViewCell {
         btn.translatesAutoresizingMaskIntoConstraints = false
         return btn
     }()
+    
+    var onChatTapped: (() -> Void)?
 
     // MARK: Init
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -116,6 +119,10 @@ final class ShortlistedCell: UITableViewCell {
 
         connectedTag.isHidden = !candidate.isConnected
         taskSubmittedTag.isHidden = !candidate.isTaskSubmitted
+    }
+    
+    @objc private func chatButtonTapped() {
+        onChatTapped?()
     }
 
 
@@ -142,6 +149,8 @@ final class ShortlistedCell: UITableViewCell {
         contentView.addSubview(connectedTag)
         contentView.addSubview(taskSubmittedTag)
         contentView.addSubview(chatButton)
+        
+        chatButton.addTarget(self, action: #selector(chatButtonTapped), for: .touchUpInside)
 
         NSLayoutConstraint.activate([
 
@@ -261,6 +270,7 @@ final class ShortlistedViewController: UIViewController {
                 // Convert to ShortlistedCandidate
                 self.candidates = shortlistedApps.map { app in
                     ShortlistedCandidate(
+                        actorId: app.actorId,
                         name: "Applicant \(app.id.uuidString.prefix(8))",
                         experience: "Task Submitted",
                         location: "India",
@@ -337,9 +347,45 @@ extension ShortlistedViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
 
         let cell = tableView.dequeueReusableCell(withIdentifier: ShortlistedCell.id, for: indexPath) as! ShortlistedCell
+        let candidate = candidates[indexPath.row]
 
-        cell.configure(with: candidates[indexPath.row])
+        cell.configure(with: candidate)
         cell.selectionStyle = .none
+        
+        // Set chat button action
+        cell.onChatTapped = { [weak self] in
+            self?.openChatWithApplicant(actorId: candidate.actorId, name: candidate.name)
+        }
+        
         return cell
+    }
+    
+    // MARK: - Messaging
+    
+    private func openChatWithApplicant(actorId: UUID, name: String) {
+        Task {
+            do {
+                // Create or get existing conversation
+                let conversation = try await MessagesService.shared.getOrCreateConversation(withUserId: actorId)
+                
+                await MainActor.run {
+                    // Import MessagesViewController to use ChatViewController
+                    let chatVC = ChatViewController()
+                    chatVC.conversationId = conversation.id
+                    chatVC.title = name
+                    self.navigationController?.pushViewController(chatVC, animated: true)
+                }
+            } catch {
+                await MainActor.run {
+                    let alert = UIAlertController(
+                        title: "Error",
+                        message: "Failed to start conversation: \(error.localizedDescription)",
+                        preferredStyle: .alert
+                    )
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
+        }
     }
 }
