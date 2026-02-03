@@ -17,25 +17,31 @@ struct FloatingMenuButton: View {
     @State private var isExpanded = false
     
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             // Camera Button (Top, 45°)
-            MenuActionButton(
-                icon: "camera.fill",
-                label: "Camera",
-                isVisible: isExpanded,
-                offset: calculateOffset(angle: 45, radius: 120)
-            ) {
-                collapseAndExecute(didTapCamera)
+            if isExpanded {
+                MenuActionButton(
+                    icon: "camera.fill",
+                    label: "Camera",
+                    isVisible: isExpanded,
+                    offset: calculateOffset(angle: 45, radius: 120)
+                ) {
+                    collapseAndExecute(didTapCamera)
+                }
+                .transition(.scale.combined(with: .opacity))
             }
             
             // Gallery Button (Top-Left, 90°)
-            MenuActionButton(
-                icon: "photo.on.rectangle",
-                label: "Gallery",
-                isVisible: isExpanded,
-                offset: calculateOffset(angle: 90, radius: 110)
-            ) {
-                collapseAndExecute(didTapGallery)
+            if isExpanded {
+                MenuActionButton(
+                    icon: "photo.on.rectangle",
+                    label: "Gallery",
+                    isVisible: isExpanded,
+                    offset: calculateOffset(angle: 90, radius: 110)
+                ) {
+                    collapseAndExecute(didTapGallery)
+                }
+                .transition(.scale.combined(with: .opacity))
             }
             
             // Main Plus/X Button
@@ -62,7 +68,7 @@ struct FloatingMenuButton: View {
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
         }
-        .frame(width: 60, height: 60)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
     
     // MARK: - Helper Methods
@@ -119,10 +125,10 @@ struct MenuActionButton: View {
                     .foregroundColor(.primary)
             }
         }
-        .contentShape(Rectangle())
-        .offset(isVisible ? offset : .zero)
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .offset(offset)
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible ? 1 : 0.1)
-        .animation(.spring(response: 0.5, dampingFraction: 0.6), value: isVisible)
     }
 }

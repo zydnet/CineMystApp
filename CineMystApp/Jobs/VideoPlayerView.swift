@@ -4,8 +4,8 @@
 //
 //  Created by user@55 on 20/11/25.
 //
-import AVFoundation
 import UIKit
+import AVFoundation
 
 class VideoPlayerView: UIView {
 

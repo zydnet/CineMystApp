@@ -55,6 +55,7 @@ final class HomeDashboardViewController: UIViewController {
         
         let hostingController = UIHostingController(rootView: swiftUIView)
         hostingController.view.backgroundColor = UIColor.clear
+        hostingController.view.isOpaque = false
         
         addChild(hostingController)
         view.addSubview(hostingController.view)
@@ -62,10 +63,10 @@ final class HomeDashboardViewController: UIViewController {
         hostingController.view.translatesAutoresizingMaskIntoConstraints = false
         
         NSLayoutConstraint.activate([
-            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: 60),
-            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 10),
-            hostingController.view.widthAnchor.constraint(equalToConstant: 220),
-            hostingController.view.heightAnchor.constraint(equalToConstant: 220)
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            hostingController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+            hostingController.view.widthAnchor.constraint(equalToConstant: 280),
+            hostingController.view.heightAnchor.constraint(equalToConstant: 280)
         ])
         
         hostingController.didMove(toParent: self)
