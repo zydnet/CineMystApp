@@ -10,6 +10,8 @@ import UIKit
 // MARK: - Comment Bottom Sheet
 class CommentBottomSheetViewController: UIViewController {
     
+    var flickId: String?
+    
     private let titleLabel: UILabel = {
         let label = UILabel()
         label.text = "Comments"
@@ -52,23 +54,118 @@ class CommentBottomSheetViewController: UIViewController {
         return btn
     }()
     
-    private var comments: [ReelComment] = [
-        ReelComment(username: "johndoe", text: "Amazing content! 🔥", timeAgo: "2h"),
-        ReelComment(username: "janedoe", text: "Love this!", timeAgo: "5h"),
-        ReelComment(username: "user123", text: "Where can I learn more about this?", timeAgo: "1d"),
-        ReelComment(username: "creator_pro", text: "Great work!", timeAgo: "2d")
-    ]
+    private let loadingIndicator: UIActivityIndicatorView = {
+        let indicator = UIActivityIndicatorView(style: .medium)
+        indicator.hidesWhenStopped = true
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        return indicator
+    }()
+    
+    private var comments: [ReelComment] = []
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         setupViews()
+        sendButton.addTarget(self, action: #selector(sendCommentTapped), for: .touchUpInside)
+        loadComments()
+    }
+    
+    private func loadComments() {
+        guard let flickId = flickId else { return }
+        
+        loadingIndicator.startAnimating()
+        
+        Task {
+            do {
+                let flickComments = try await FlicksService.shared.fetchComments(flickId: flickId)
+                
+                await MainActor.run {
+                    self.comments = flickComments.map { comment in
+                        ReelComment(
+                            username: comment.username ?? "User",
+                            text: comment.comment,
+                            timeAgo: self.timeAgoString(from: comment.createdAt)
+                        )
+                    }
+                    self.tableView.reloadData()
+                    self.loadingIndicator.stopAnimating()
+                }
+            } catch {
+                print("❌ Failed to load comments: \(error)")
+                await MainActor.run {
+                    self.loadingIndicator.stopAnimating()
+                }
+            }
+        }
+    }
+    
+    @objc private func sendCommentTapped() {
+        guard let flickId = flickId,
+              let commentText = commentTextField.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !commentText.isEmpty else { return }
+        
+        sendButton.isEnabled = false
+        
+        Task {
+            do {
+                let newComment = try await FlicksService.shared.addComment(flickId: flickId, comment: commentText)
+                
+                await MainActor.run {
+                    // Add to local array
+                    let reelComment = ReelComment(
+                        username: newComment.username ?? "You",
+                        text: newComment.comment,
+                        timeAgo: "Just now"
+                    )
+                    self.comments.insert(reelComment, at: 0)
+                    self.tableView.reloadData()
+                    
+                    // Clear input
+                    self.commentTextField.text = ""
+                    self.sendButton.isEnabled = true
+                    
+                    // Dismiss keyboard
+                    self.commentTextField.resignFirstResponder()
+                }
+            } catch {
+                print("❌ Failed to post comment: \(error)")
+                await MainActor.run {
+                    self.sendButton.isEnabled = true
+                    
+                    let alert = UIAlertController(title: "Error", message: "Failed to post comment. Please try again.", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "OK", style: .default))
+                    self.present(alert, animated: true)
+                }
+            }
+        }
+    }
+    
+    private func timeAgoString(from dateString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        guard let date = formatter.date(from: dateString) else { return "now" }
+        
+        let seconds = Date().timeIntervalSince(date)
+        
+        if seconds < 60 {
+            return "Just now"
+        } else if seconds < 3600 {
+            let minutes = Int(seconds / 60)
+            return "\(minutes)m"
+        } else if seconds < 86400 {
+            let hours = Int(seconds / 3600)
+            return "\(hours)h"
+        } else {
+            let days = Int(seconds / 86400)
+            return "\(days)d"
+        }
     }
     
     private func setupViews() {
         view.addSubview(titleLabel)
         view.addSubview(tableView)
         view.addSubview(commentInputContainer)
+        view.addSubview(loadingIndicator)
         commentInputContainer.addSubview(commentTextField)
         commentInputContainer.addSubview(sendButton)
         
@@ -76,6 +173,9 @@ class CommentBottomSheetViewController: UIViewController {
             titleLabel.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
             titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             titleLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            
+            loadingIndicator.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 20),
+            loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             
             tableView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 20),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
