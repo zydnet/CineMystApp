@@ -4,10 +4,12 @@
 //
 
 import UIKit
+import Supabase
 
 // MARK: - MentorCell (unchanged)
 final class MentorCell: UICollectionViewCell {
     static let reuseIdentifier = "MentorCell"
+    private static let imageCache = NSCache<NSString, UIImage>()
 
     private let cardView: UIView = {
         let v = UIView()
@@ -129,9 +131,46 @@ final class MentorCell: UICollectionViewCell {
         nameLabel.text = mentor.name
         roleLabel.text = mentor.role
         ratingLabel.text = String(format: "%.1f", mentor.rating)
+        // Prefer remote profilePictureUrl if provided, with cache; otherwise use local asset or symbol
+        photoView.image = nil
+        if let urlStrRaw = mentor.profilePictureUrl, !urlStrRaw.isEmpty {
+            let placeholderConfig = UIImage.SymbolConfiguration(pointSize: 36, weight: .regular)
+            photoView.image = UIImage(systemName: "person.crop.rectangle", withConfiguration: placeholderConfig)
+            photoView.contentMode = .center
+            photoView.tintColor = UIColor.systemGray3
+            photoView.backgroundColor = UIColor.systemGray6
 
-        // Use asset if available, else fallback to symbol placeholder
-        if let imageName = mentor.imageName, let img = UIImage(named: imageName) {
+            // Try several URL creation strategies
+            var candidateURLs: [URL] = []
+            if let u = URL(string: urlStrRaw) { candidateURLs.append(u) }
+            if let esc = urlStrRaw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed), let u2 = URL(string: esc) { candidateURLs.append(u2) }
+            if !urlStrRaw.contains("://"), let u3 = URL(string: "https://\(urlStrRaw)") { candidateURLs.append(u3) }
+
+            // try cache for any candidate key
+            for c in candidateURLs {
+                let key = NSString(string: c.absoluteString)
+                if let cached = MentorCell.imageCache.object(forKey: key) {
+                    photoView.image = cached
+                    photoView.contentMode = .scaleAspectFill
+                    photoView.backgroundColor = .clear
+                    return
+                }
+            }
+
+            Task {
+                for c in candidateURLs {
+                    if let (data, _) = try? await URLSession.shared.data(from: c), let img = UIImage(data: data) {
+                        MentorCell.imageCache.setObject(img, forKey: NSString(string: c.absoluteString))
+                        await MainActor.run {
+                            self.photoView.image = img
+                            self.photoView.contentMode = .scaleAspectFill
+                            self.photoView.backgroundColor = .clear
+                        }
+                        return
+                    }
+                }
+            }
+        } else if let imageName = mentor.imageName, let img = UIImage(named: imageName) {
             photoView.image = img
             photoView.contentMode = .scaleAspectFill
         } else {
@@ -243,13 +282,22 @@ final class MentorshipHomeViewController: UIViewController {
         return cv
     }()
 
-    // sample mentors — uses shared Mentor model
-    private var mentors: [Mentor] = [
-        Mentor(name: "Nathan Hales", role: "Actor", rating: 4.8),
-        Mentor(name: "Ava Johnson", role: "Casting Director", rating: 4.9),
-        Mentor(name: "Maya Patel", role: "Actor", rating: 5.0),
-        Mentor(name: "Riya Sharma", role: "Actor", rating: 4.9)
-    ]
+    // mentors loaded from Supabase
+    private var mentors: [Mentor] = []
+
+    // DTO matching mentor_profiles table
+    private struct MentorRecord: Codable {
+        let id: String?
+        let display_name: String?
+        let name: String?
+        let role: String?
+        let rating: Double?
+        let profile_picture_url: String?
+        let profile_image: String?
+
+        var displayName: String? { display_name ?? name }
+        var imageURL: String? { profile_picture_url ?? profile_image }
+    }
 
     // lifecycle
     override func viewDidLoad() {
@@ -274,6 +322,49 @@ final class MentorshipHomeViewController: UIViewController {
 
         setupConstraints()
         configureEmptyState(forIndex: segmentControl.selectedSegmentIndex)
+        // load mentors from backend
+        Task { await loadMentorsFromSupabase() }
+    }
+
+    // MARK: - Networking
+    private func loadMentorsFromSupabase() async {
+        do {
+            let response = try await supabase
+                .from("mentor_profiles")
+                .select()
+                .order("rating", ascending: false)
+                .execute()
+
+            let records = try JSONDecoder().decode([MentorRecord].self, from: response.data)
+
+            let mapped: [Mentor] = records.map { r in
+                let name = r.displayName ?? "Unknown"
+                let role = r.role ?? ""
+                let rating = r.rating ?? 0.0
+                // keep imageName nil => cell will show placeholder (download separately if needed)
+                return Mentor(id: r.id,
+                              name: name,
+                              role: role,
+                              rating: rating,
+                              imageName: nil,
+                              profilePictureUrl: r.imageURL,
+                              ratingCount: nil,
+                              mentorshipAreas: nil,
+                              about: nil,
+                              userId: nil,
+                              metadataJson: nil,
+                              createdAt: nil,
+                              priceCents: nil,
+                              currency: nil)
+            }
+
+            await MainActor.run {
+                self.mentors = mapped
+                self.collectionView.reloadData()
+            }
+        } catch {
+            print("Failed to load mentors:", error)
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {

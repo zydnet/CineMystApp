@@ -2,23 +2,20 @@
 //  AllCallsPanelViewController.swift
 //  ProgrammaticMentorship
 //
-//  Created by You on 2025-11-17.
-//  Shows "All calls" with segmented filter: Upcoming | Past | Canceled
-//
 
 import UIKit
 
-// MARK: - Model (unique name: CallItem)
+// MARK: - Model
 struct CallItem {
     let id: String
     let mentorName: String
     let mentorRole: String
     let date: Date
     let services: [String]
-    let avatarName: String? // asset name
-    let status: CallItemStatus
+    let avatarName: String?
+    let status: Status
 
-    enum CallItemStatus: Equatable {
+    enum Status {
         case upcoming
         case ended
         case canceled
@@ -33,348 +30,174 @@ struct CallItem {
 
         var color: UIColor {
             switch self {
-            case .upcoming: return UIColor.systemGreen
-            case .ended: return UIColor.systemRed
-            case .canceled: return UIColor.systemOrange
+            case .upcoming: return .systemGreen
+            case .ended: return .systemRed
+            case .canceled: return .systemOrange
             }
         }
     }
 }
 
-// MARK: - CallItemCell (unique)
+// MARK: - Cell
 final class CallItemCell: UITableViewCell {
+
     static let reuseIdentifier = "CallItemCell"
 
-    private let cardView: UIView = {
-        let v = UIView()
-        v.translatesAutoresizingMaskIntoConstraints = false
-        v.backgroundColor = UIColor.systemGray6
-        v.layer.cornerRadius = 18
-        v.layer.masksToBounds = true
-        return v
-    }()
-
-    private let avatarView: UIImageView = {
-        let iv = UIImageView()
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        iv.contentMode = .scaleAspectFill
-        iv.layer.cornerRadius = 32 // half of width/height (64)
-        iv.layer.masksToBounds = true
-        iv.widthAnchor.constraint(equalToConstant: 64).isActive = true
-        iv.heightAnchor.constraint(equalToConstant: 64).isActive = true
-        iv.backgroundColor = UIColor.systemGray5
-        return iv
-    }()
-
-    private let nameLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
-        l.numberOfLines = 1
-        return l
-    }()
-
-    private let roleLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = UIFont.systemFont(ofSize: 12, weight: .regular)
-        l.textColor = .secondaryLabel
-        l.numberOfLines = 1
-        return l
-    }()
-
-    private let dateIcon: UIImageView = {
-        let iv = UIImageView(image: UIImage(systemName: "calendar"))
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        iv.contentMode = .scaleAspectFit
-        iv.widthAnchor.constraint(equalToConstant: 14).isActive = true
-        iv.heightAnchor.constraint(equalToConstant: 14).isActive = true
-        iv.tintColor = .secondaryLabel
-        return iv
-    }()
-
-    private let timeIcon: UIImageView = {
-        let iv = UIImageView(image: UIImage(systemName: "clock"))
-        iv.translatesAutoresizingMaskIntoConstraints = false
-        iv.contentMode = .scaleAspectFit
-        iv.widthAnchor.constraint(equalToConstant: 12).isActive = true
-        iv.heightAnchor.constraint(equalToConstant: 12).isActive = true
-        iv.tintColor = .secondaryLabel
-        return iv
-    }()
-
-    private let dateLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = UIFont.systemFont(ofSize: 12)
-        l.textColor = .secondaryLabel
-        l.numberOfLines = 1
-        return l
-    }()
-
-    private let timeLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = UIFont.systemFont(ofSize: 12)
-        l.textColor = .secondaryLabel
-        l.numberOfLines = 1
-        return l
-    }()
-
-    private let servicesLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = UIFont.systemFont(ofSize: 13)
-        l.textColor = .secondaryLabel
-        l.numberOfLines = 1
-        return l
-    }()
-
-    private let statusLabel: UILabel = {
-        let l = UILabel()
-        l.translatesAutoresizingMaskIntoConstraints = false
-        l.font = UIFont.systemFont(ofSize: 13, weight: .semibold)
-        l.textAlignment = .right
-        return l
-    }()
-
-    // Stacks
-    private lazy var titleStack: UIStackView = {
-        let s = UIStackView(arrangedSubviews: [nameLabel, roleLabel])
-        s.axis = .vertical
-        s.spacing = 4
-        s.translatesAutoresizingMaskIntoConstraints = false
-        return s
-    }()
-
-    private lazy var dateRow: UIStackView = {
-        let left = UIStackView(arrangedSubviews: [dateIcon, dateLabel])
-        left.axis = .horizontal
-        left.spacing = 6
-        left.alignment = .center
-        left.translatesAutoresizingMaskIntoConstraints = false
-
-        let right = UIStackView(arrangedSubviews: [timeIcon, timeLabel])
-        right.axis = .horizontal
-        right.spacing = 6
-        right.alignment = .center
-        right.translatesAutoresizingMaskIntoConstraints = false
-
-        let s = UIStackView(arrangedSubviews: [left, right])
-        s.axis = .horizontal
-        s.spacing = 12
-        s.alignment = .center
-        s.translatesAutoresizingMaskIntoConstraints = false
-        return s
-    }()
-
-    private lazy var leftColumn: UIStackView = {
-        let s = UIStackView(arrangedSubviews: [titleStack, dateRow, servicesLabel])
-        s.axis = .vertical
-        s.spacing = 8
-        s.alignment = .leading
-        s.translatesAutoresizingMaskIntoConstraints = false
-        return s
-    }()
+    private let cardView = UIView()
+    private let avatar = UIImageView()
+    private let nameLabel = UILabel()
+    private let roleLabel = UILabel()
+    private let dateLabel = UILabel()
+    private let timeLabel = UILabel()
+    private let servicesLabel = UILabel()
+    private let statusLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
         selectionStyle = .none
         backgroundColor = .clear
         contentView.backgroundColor = .clear
-        setup()
+        setupUI()
     }
 
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    required init?(coder: NSCoder) { fatalError() }
 
-    private func setup() {
+    private func setupUI() {
+
+        cardView.backgroundColor = .systemGray6
+        cardView.layer.cornerRadius = 18
+        cardView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(cardView)
-        cardView.addSubview(avatarView)
-        cardView.addSubview(leftColumn)
+
+        avatar.translatesAutoresizingMaskIntoConstraints = false
+        avatar.layer.cornerRadius = 32
+        avatar.clipsToBounds = true
+        avatar.backgroundColor = .systemGray5
+
+        nameLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        roleLabel.font = .systemFont(ofSize: 12)
+        roleLabel.textColor = .secondaryLabel
+        dateLabel.font = .systemFont(ofSize: 12)
+        timeLabel.font = .systemFont(ofSize: 12)
+        servicesLabel.font = .systemFont(ofSize: 13)
+        servicesLabel.textColor = .secondaryLabel
+        statusLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+
+        let infoStack = UIStackView(arrangedSubviews: [
+            nameLabel, roleLabel, dateLabel, timeLabel, servicesLabel
+        ])
+        infoStack.axis = .vertical
+        infoStack.spacing = 4
+        infoStack.translatesAutoresizingMaskIntoConstraints = false
+
+        cardView.addSubview(avatar)
+        cardView.addSubview(infoStack)
         cardView.addSubview(statusLabel)
 
         NSLayoutConstraint.activate([
-            // card
             cardView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 12),
             cardView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             cardView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
             cardView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -12),
 
-            // avatar
-            avatarView.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
-            avatarView.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
+            avatar.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 14),
+            avatar.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
+            avatar.widthAnchor.constraint(equalToConstant: 64),
+            avatar.heightAnchor.constraint(equalToConstant: 64),
 
-            // left column (to right of avatar)
-            leftColumn.leadingAnchor.constraint(equalTo: avatarView.trailingAnchor, constant: 12),
-            leftColumn.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 16),
-            leftColumn.bottomAnchor.constraint(lessThanOrEqualTo: cardView.bottomAnchor, constant: -16),
-            leftColumn.trailingAnchor.constraint(lessThanOrEqualTo: statusLabel.leadingAnchor, constant: -12),
+            infoStack.leadingAnchor.constraint(equalTo: avatar.trailingAnchor, constant: 12),
+            infoStack.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 16),
+            infoStack.trailingAnchor.constraint(lessThanOrEqualTo: statusLabel.leadingAnchor, constant: -12),
 
-            // status label (right)
             statusLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -14),
-            statusLabel.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 18),
-            statusLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 66)
+            statusLabel.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 18)
         ])
     }
 
     func configure(with call: CallItem) {
+
         nameLabel.text = call.mentorName
         roleLabel.text = call.mentorRole
 
-        // date formatting to "19 Nov 2025" and time as short
         let df = DateFormatter()
-        df.dateFormat = "d MMM yyyy"
-        let datePart = df.string(from: call.date)
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        let parts = df.string(from: call.date).split(separator: ",")
 
-        let tf = DateFormatter()
-        tf.timeStyle = .short
-        let timePart = tf.string(from: call.date)
+        dateLabel.text = "📅 \(parts.first ?? "")"
+        timeLabel.text = "⏰ \(parts.last ?? "")"
+        servicesLabel.text = "Services  \(call.services.joined(separator: ", "))"
 
-        dateLabel.text = datePart
-        timeLabel.text = timePart
-
-        // Services string: "Services  Acting , Voice Over" with services semibold
-        let servicesPrefix = "Services  "
-        let servicesText = call.services.joined(separator: " , ")
-        let full = servicesPrefix + servicesText
-        let attr = NSMutableAttributedString(string: full)
-        attr.addAttribute(.font, value: UIFont.systemFont(ofSize: 13), range: NSRange(location: 0, length: servicesPrefix.count))
-        attr.addAttribute(.font, value: UIFont.systemFont(ofSize: 13, weight: .semibold), range: NSRange(location: servicesPrefix.count, length: servicesText.count))
-        servicesLabel.attributedText = attr
-
-        // status
         statusLabel.text = call.status.text
         statusLabel.textColor = call.status.color
 
-        // avatar
         if let name = call.avatarName, let img = UIImage(named: name) {
-            avatarView.image = img
-            avatarView.contentMode = .scaleAspectFill
+            avatar.image = img
+            avatar.contentMode = .scaleAspectFill
         } else {
-            let config = UIImage.SymbolConfiguration(pointSize: 28, weight: .regular)
-            avatarView.image = UIImage(systemName: "person.crop.circle", withConfiguration: config)
-            avatarView.tintColor = UIColor.systemGray3
-            avatarView.contentMode = .center
-            avatarView.backgroundColor = UIColor.systemGray5
+            avatar.image = UIImage(systemName: "person.crop.circle")
+            avatar.tintColor = .systemGray3
+            avatar.contentMode = .center
         }
     }
 }
 
-// MARK: - AllCallsPanelViewController (unique)
+// MARK: - ViewController
 final class AllCallsPanelViewController: UIViewController {
 
-    // MARK: UI
-    private let titleLabel: UILabel = {
-        let l = UILabel()
-        l.text = "All calls"
-        l.font = UIFont.systemFont(ofSize: 34, weight: .bold)
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
-    }()
+    private let titleLabel = UILabel()
+    private let subtitleLabel = UILabel()
+    private let segmentedControl = UISegmentedControl(items: ["Upcoming", "Past", "Canceled"])
+    private let tableView = UITableView()
 
-    private let subtitleLabel: UILabel = {
-        let l = UILabel()
-        l.text = "Track all your calls"
-        l.font = UIFont.systemFont(ofSize: 13)
-        l.textColor = .secondaryLabel
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
-    }()
-
-    private lazy var segmentedControl: UISegmentedControl = {
-        let sc = UISegmentedControl(items: ["Upcoming", "Past", "Canceled"])
-        sc.selectedSegmentIndex = 0
-        sc.translatesAutoresizingMaskIntoConstraints = false
-
-        // pill styling
-        sc.selectedSegmentTintColor = .white
-        sc.backgroundColor = UIColor.systemGray5
-        sc.setTitleTextAttributes([.font: UIFont.systemFont(ofSize: 14, weight: .semibold)], for: .normal)
-        sc.layer.cornerRadius = 20
-        sc.layer.masksToBounds = true
-
-        sc.addTarget(self, action: #selector(segmentChanged(_:)), for: .valueChanged)
-        return sc
-    }()
-
-    private lazy var tableView: UITableView = {
-        let tv = UITableView(frame: .zero, style: .plain)
-        tv.translatesAutoresizingMaskIntoConstraints = false
-        tv.register(CallItemCell.self, forCellReuseIdentifier: CallItemCell.reuseIdentifier)
-        tv.separatorStyle = .none
-        tv.backgroundColor = .clear
-        tv.tableFooterView = UIView()
-
-        // dynamic height for cells (fixes clipping)
-        tv.rowHeight = UITableView.automaticDimension
-        tv.estimatedRowHeight = 140
-
-        return tv
-    }()
-
-    // MARK: Data
     private var allCalls: [CallItem] = []
     private var displayedCalls: [CallItem] = []
 
-    // MARK: Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
+        hidesBottomBarWhenPushed = true
 
-        // Keep this too — safe if this VC is pushed from elsewhere
-        self.hidesBottomBarWhenPushed = true
-
-        navigationItem.largeTitleDisplayMode = .never
-        navigationItem.backButtonDisplayMode = .default
-
-        setupHierarchy()
+        setupUI()
         setupConstraints()
+        setupTable()
 
-        tableView.dataSource = self
-        tableView.delegate = self
+        segmentedControl.selectedSegmentIndex = 0
+        segmentedControl.addTarget(self, action: #selector(segmentChanged), for: .valueChanged)
 
         loadSampleData()
-        applyFilterForSelectedSegment()
+        applyFilter()
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
+    private func setupUI() {
+        titleLabel.text = "All calls"
+        titleLabel.font = .systemFont(ofSize: 34, weight: .bold)
 
-        // Hide the tab bar while this screen is visible
-        tabBarController?.tabBar.isHidden = true
-    }
+        subtitleLabel.text = "Track all your calls"
+        subtitleLabel.font = .systemFont(ofSize: 13)
+        subtitleLabel.textColor = .secondaryLabel
 
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
+        segmentedControl.backgroundColor = .systemGray5
+        segmentedControl.selectedSegmentTintColor = .white
 
-        // Restore the tab bar only when this VC is being removed from its parent (popped/dismissed).
-        // Do not restore if only pushing another controller (pushed VCs typically set hidesBottomBarWhenPushed = true).
-        if isMovingFromParent || isBeingDismissed {
-            tabBarController?.tabBar.isHidden = false
+        [titleLabel, subtitleLabel, segmentedControl, tableView].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview($0)
         }
     }
 
-    private func setupHierarchy() {
-        view.addSubview(titleLabel)
-        view.addSubview(subtitleLabel)
-        view.addSubview(segmentedControl)
-        view.addSubview(tableView)
-    }
-
     private func setupConstraints() {
-        let pad: CGFloat = 20
-
         NSLayoutConstraint.activate([
             titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: pad),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
 
             subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
 
             segmentedControl.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 16),
             segmentedControl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            segmentedControl.heightAnchor.constraint(equalToConstant: 40),
             segmentedControl.widthAnchor.constraint(equalToConstant: 320),
+            segmentedControl.heightAnchor.constraint(equalToConstant: 40),
 
             tableView.topAnchor.constraint(equalTo: segmentedControl.bottomAnchor, constant: 18),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -383,124 +206,88 @@ final class AllCallsPanelViewController: UIViewController {
         ])
     }
 
-    // MARK: - Data Loading
+    private func setupTable() {
+        tableView.register(CallItemCell.self, forCellReuseIdentifier: CallItemCell.reuseIdentifier)
+        tableView.separatorStyle = .none
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 140
+        tableView.dataSource = self
+        tableView.delegate = self
+        tableView.backgroundColor = .clear
+    }
+
+    // MARK: - Data
     private func loadSampleData() {
         let cal = Calendar.current
         allCalls = [
-            CallItem(id: "1",
-                     mentorName: "Amit Sawi",
-                     mentorRole: "Junior Artist",
-                     date: cal.date(byAdding: .day, value: 2, to: Date()) ?? Date(),
-                     services: ["Acting", "Voice Over"],
-                     avatarName: "Image",     // ← USE YOUR ASSET NAMED "Image"
-                     status: .upcoming),
-            CallItem(id: "2",
-                     mentorName: "Amit Sawi",
-                     mentorRole: "Junior Artist",
-                     date: cal.date(byAdding: .day, value: -3, to: Date()) ?? Date(),
-                     services: ["Acting", "Voice Over"],
-                     avatarName: "Image",     // ← USE YOUR ASSET NAMED "Image"
-                     status: .ended),
-            CallItem(id: "3",
-                     mentorName: "Amit Sawi",
-                     mentorRole: "Junior Artist",
-                     date: cal.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
-                     services: ["Acting"],
-                     avatarName: "Image",     // ← USE YOUR ASSET NAMED "Image"
-                     status: .canceled),
-            CallItem(id: "4",
-                     mentorName: "Amit Sawi",
-                     mentorRole: "Junior Artist",
-                     date: cal.date(byAdding: .day, value: -7, to: Date()) ?? Date(),
-                     services: ["Voice Over"],
-                     avatarName: "Image",     // ← USE YOUR ASSET NAMED "Image"
-                     status: .ended)
+            CallItem(
+                id: "1",
+                mentorName: "Amit Sawi",
+                mentorRole: "Junior Artist",
+                date: cal.date(byAdding: .day, value: 2, to: Date())!,
+                services: ["Acting", "Voice Over"],
+                avatarName: "Image",
+                status: .upcoming
+            )
         ]
     }
 
-    // MARK: - Segment handling
-    @objc private func segmentChanged(_ s: UISegmentedControl) {
-        applyFilterForSelectedSegment()
-        animateTableTransition()
+    // MARK: - Filtering (CORRECT)
+    @objc private func segmentChanged() {
+        applyFilter()
     }
 
-    private func applyFilterForSelectedSegment() {
+    private func applyFilter() {
+
         switch segmentedControl.selectedSegmentIndex {
-        case 0:
+
+        case 0: // UPCOMING
             displayedCalls = allCalls.filter { $0.status == .upcoming }
-        case 1:
+            tableView.backgroundView = nil
+
+        case 1: // PAST
             displayedCalls = allCalls.filter { $0.status == .ended }
-        case 2:
+            setEmptyText(displayedCalls.isEmpty ? "No past sessions" : nil)
+
+        case 2: // CANCELED
             displayedCalls = allCalls.filter { $0.status == .canceled }
+            setEmptyText(displayedCalls.isEmpty ? "No canceled sessions" : nil)
+
         default:
-            displayedCalls = allCalls
+            displayedCalls = []
+            tableView.backgroundView = nil
         }
+
         tableView.reloadData()
     }
 
-    private func animateTableTransition() {
-        tableView.alpha = 0
-        UIView.animate(withDuration: 0.18) {
-            self.tableView.alpha = 1
+    private func setEmptyText(_ text: String?) {
+        if let text = text {
+            let label = UILabel()
+            label.text = text
+            label.textAlignment = .center
+            label.font = .systemFont(ofSize: 15, weight: .medium)
+            label.textColor = .secondaryLabel
+            tableView.backgroundView = label
+        } else {
+            tableView.backgroundView = nil
         }
     }
 }
 
-// MARK: - UITableViewDataSource / Delegate
+// MARK: - Table Delegates
 extension AllCallsPanelViewController: UITableViewDataSource, UITableViewDelegate {
+
     func tableView(_ tv: UITableView, numberOfRowsInSection section: Int) -> Int {
         displayedCalls.count
     }
 
     func tableView(_ tv: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        guard let cell = tv.dequeueReusableCell(withIdentifier: CallItemCell.reuseIdentifier, for: indexPath) as? CallItemCell else {
-            return UITableViewCell()
-        }
-        let call = displayedCalls[indexPath.row]
-        cell.configure(with: call)
+        let cell = tv.dequeueReusableCell(
+            withIdentifier: CallItemCell.reuseIdentifier,
+            for: indexPath
+        ) as! CallItemCell
+        cell.configure(with: displayedCalls[indexPath.row])
         return cell
-    }
-
-    func tableView(_ tv: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tv.deselectRow(at: indexPath, animated: true)
-        let call = displayedCalls[indexPath.row]
-        let vc = CallItemDetailViewController()
-        vc.call = call
-        // ensure pushed detail also hides bottom bar
-        vc.hidesBottomBarWhenPushed = true
-        navigationController?.pushViewController(vc, animated: true)
-    }
-
-    // removed fixed height methods so automaticDimension can size the rows correctly
-}
-
-// MARK: - CallItemDetailViewController (unique)
-final class CallItemDetailViewController: UIViewController {
-    var call: CallItem?
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-
-        // keep this here as well (harmless if already handled)
-        self.hidesBottomBarWhenPushed = true
-
-        view.backgroundColor = .systemBackground
-        title = "Call"
-
-        let label = UILabel()
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        if let c = call {
-            label.text = "\(c.mentorName)\n\(c.mentorRole)\n\(c.status.text)"
-        } else {
-            label.text = "Call details"
-        }
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-        ])
     }
 }

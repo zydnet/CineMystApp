@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import Supabase
 
 final class PaymentViewController: UIViewController {
 
@@ -20,7 +21,12 @@ final class PaymentViewController: UIViewController {
     private let selectedTime: String?
 
     /// accept mentor (optional)
-    var mentor: Mentor?
+    var mentor: Mentor? {
+        didSet {
+            // If mentor assigned after view loaded, refresh price
+            Task { await loadPriceFromSessionIfNeeded() }
+        }
+    }
 
     init(area: String? = nil, date: Date? = nil, time: String? = nil) {
         self.selectedArea = area
@@ -203,7 +209,7 @@ final class PaymentViewController: UIViewController {
     }()
     private let amountLabel: UILabel = {
         let l = UILabel()
-        l.text = "₹155"
+    l.text = ""
         l.font = .systemFont(ofSize: 32, weight: .bold)
         return l
     }()
@@ -244,6 +250,9 @@ final class PaymentViewController: UIViewController {
         showCard(animated: false)
         // initial populate from store
         refreshCardFromStore()
+
+    // Load price from mentorship_sessions table (if mentor provided)
+    Task { await self.loadPriceFromSessionIfNeeded() }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -299,6 +308,69 @@ final class PaymentViewController: UIViewController {
             self?.applyCardToUI(newCard)
         }
         present(vc, animated: true, completion: nil)
+    }
+
+    // MARK: - Price loading
+    private func loadPriceFromSessionIfNeeded() async {
+        guard let mentorId = mentor?.id else { return }
+        do {
+            let res = try await supabase.database
+                .from("mentorship_sessions")
+                .select("price_cents")
+                .eq("mentor_id", value: mentorId)
+                .order("created_at", ascending: false)
+                .limit(1)
+                .execute()
+            print("[Payment] price query data=\(String(describing: res.data))")
+            if let rows = try rowsArray(from: res.data), !rows.isEmpty {
+                if let first = rows.first as? [String: Any] {
+                    var cents: Int? = nil
+                    if let v = first["price_cents"] as? Int { cents = v }
+                    else if let s = first["price_cents"] as? String, let iv = Int(s) { cents = iv }
+                    else if let d = first["price_cents"] as? Double { cents = Int(d) }
+
+                    if let c = cents {
+                        await MainActor.run {
+                            self.amountLabel.text = Self.formatPrice(cents: c)
+                        }
+                        return
+                    }
+                }
+            }
+        } catch {
+            print("[Payment] error loading price: \(error)")
+        }
+    }
+
+    private static func formatPrice(cents: Int) -> String {
+        let amount = Double(cents) / 100.0
+        let nf = NumberFormatter()
+        nf.numberStyle = .currency
+        // prefer India/Rupee symbol if available
+        nf.locale = Locale(identifier: "en_IN")
+        if let s = nf.string(from: NSNumber(value: amount)) {
+            return s
+        }
+        // fallback simple formatting
+        return "₹\(Int(amount))"
+    }
+
+    // Normalize response.data into an array of Any for decoding. Matches helper in other files.
+    private func rowsArray(from raw: Any?) throws -> [Any]? {
+        guard let raw = raw else { return nil }
+        // If it's already an array, return it
+        if let arr = raw as? [Any] { return arr }
+        // If it's Data representing JSON, try to decode
+        if let data = raw as? Data {
+            let json = try JSONSerialization.jsonObject(with: data)
+            if let arr = json as? [Any] { return arr }
+        }
+        // If it's a string of JSON, attempt to parse
+        if let s = raw as? String, let data = s.data(using: .utf8) {
+            let json = try JSONSerialization.jsonObject(with: data)
+            if let arr = json as? [Any] { return arr }
+        }
+        return nil
     }
 
     @objc private func addCardTapped() {

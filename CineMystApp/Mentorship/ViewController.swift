@@ -6,6 +6,33 @@
 //
 
 import UIKit
+import Supabase
+
+// Codable DTO matchingit is  selected columns from `mentor_profiles` table
+private struct MentorDetailRecord: Codable {
+    let id: String?
+    let displayName: String?
+    let about: String?
+    // DB column is text[] (array of strings)
+    let mentorshipAreas: [String]?
+    let rating: Double?
+    let ratingCount: Int?
+    let profilePictureUrl: String?
+    // optional raw metadata JSON we may extract from the raw row
+    var metadataJson: String?
+    // direct columns on mentor_profiles
+    let yoe: Double?
+    let session: Int?
+}
+
+private struct ReviewRecord: Codable {
+    let id: String?
+    let authorName: String?
+    let createdAt: String?
+    let rating: Int?
+    let content: String?
+    let avatarUrl: String?
+}
 
 final class BookViewController: UIViewController {
 
@@ -13,6 +40,9 @@ final class BookViewController: UIViewController {
     var mentor: Mentor? {
         didSet { applyMentorIfNeeded() }
     }
+
+    // Detailed record loaded from the backend (optional)
+    private var mentorDetail: MentorDetailRecord?
 
     // MARK: - UI
     private let scrollView = UIScrollView()
@@ -25,6 +55,7 @@ final class BookViewController: UIViewController {
         iv.clipsToBounds = true
         return iv
     }()
+    private static let imageCache = NSCache<NSString, UIImage>()
     private var headerHeightConstraint: NSLayoutConstraint?
 
     private let nameLabel: UILabel = {
@@ -61,11 +92,25 @@ final class BookViewController: UIViewController {
 
     private let reviewsCountLabel: UILabel = {
         let l = UILabel()
-        l.text = "15 reviews"
+        l.text = ""
         l.font = .systemFont(ofSize: 11)
         l.textColor = .secondaryLabel
         l.textAlignment = .center
+    l.isHidden = true // hide reviews count per request
         return l
+    }()
+
+    // Mutable stat labels so we can replace static values from backend
+    private let yearExpValueLabel = UILabel()
+    private let mentorStatValueLabel = UILabel()
+    private let sessionsValueLabel = UILabel()
+
+    // Reviews container populated from backend
+    private lazy var reviewsStack: UIStackView = {
+        let v = UIStackView()
+        v.axis = .vertical
+        v.spacing = 12
+        return v
     }()
 
     private func statBlock(title: String, value: String) -> UIStackView {
@@ -92,9 +137,34 @@ final class BookViewController: UIViewController {
     }
 
     private lazy var statsRow: UIStackView = {
-        let s1 = statBlock(title: "Year Exp", value: "10+")
-        let s2 = statBlock(title: "Mentor", value: "4 ★")
-        let s3 = statBlock(title: "Sessions", value: "50+")
+        // create stat blocks using the stored value labels so we can update them later
+        func makeBlock(title: String, valueLabel: UILabel) -> UIStackView {
+            valueLabel.text = ""
+            valueLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+            let titleLabel = UILabel()
+            titleLabel.text = title
+            titleLabel.font = .systemFont(ofSize: 12)
+            titleLabel.textColor = .secondaryLabel
+            titleLabel.textAlignment = .center
+            let v = UIStackView(arrangedSubviews: [valueLabel, titleLabel])
+            v.axis = .vertical
+            v.alignment = .center
+            v.spacing = 4
+            v.layoutMargins = .init(top: 8, left: 12, bottom: 8, right: 12)
+            v.isLayoutMarginsRelativeArrangement = true
+            v.backgroundColor = .secondarySystemBackground
+            v.layer.cornerRadius = 14
+            return v
+        }
+
+        let s1 = makeBlock(title: "Year Exp", valueLabel: yearExpValueLabel)
+        let s2 = makeBlock(title: "Mentor", valueLabel: mentorStatValueLabel)
+        let s3 = makeBlock(title: "Sessions", valueLabel: sessionsValueLabel)
+
+        yearExpValueLabel.translatesAutoresizingMaskIntoConstraints = false
+        mentorStatValueLabel.translatesAutoresizingMaskIntoConstraints = false
+        sessionsValueLabel.translatesAutoresizingMaskIntoConstraints = false
+
         let h = UIStackView(arrangedSubviews: [s1, s2, s3])
         h.axis = .horizontal
         h.distribution = .fillEqually
@@ -107,9 +177,7 @@ final class BookViewController: UIViewController {
         let l = UILabel()
         l.numberOfLines = 0
         l.font = .systemFont(ofSize: 14)
-        l.text = """
-As a Senior Director, I lead cross-functional teams to craft user-centered digital experiences that balance business goals with user needs. With a strong background in design strategy, user research, and product development,
-"""
+        l.text = ""
         return l
     }()
 
@@ -118,34 +186,13 @@ As a Senior Director, I lead cross-functional teams to craft user-centered digit
         let l = UILabel()
         l.numberOfLines = 0
         l.font = .systemFont(ofSize: 14)
-        l.text = "Acting, Dubbing, Design Thinking, Career Guidance"
+        l.text = ""
         return l
     }()
 
     private let reviewsTitle: UILabel = sectionTitle("Reviews")
-    private lazy var reviewOne = reviewView(
-        avatar: UIImage(systemName: "person.circle"),
-        name: "Sophia Clark",
-        timeAgo: "2 weeks ago",
-        rating: 5,
-        text: "The session was fantastic! The instructor was very knowledgeable and made the class enjoyable. I learned a lot and will definitely be booking another session soon."
-    )
-    private lazy var reviewTwo = reviewView(
-        avatar: UIImage(systemName: "person.circle"),
-        name: "Ethan Carter",
-        timeAgo: "1 month ago",
-        rating: 4,
-        text: "The session was good overall. The instructor was helpful, but the class could have been more structured. I still learned a few things and would consider booking again."
-    )
 
-    private let moreReviewsButton: UIButton = {
-        var config = UIButton.Configuration.plain()
-        config.title = "View more reviews"
-        config.baseForegroundColor = .systemBlue
-        let b = UIButton(configuration: config)
-        b.contentHorizontalAlignment = .leading
-        return b
-    }()
+    // moreReviewsButton removed as it's no longer required
 
     private let bookButton: UIButton = {
         var config = UIButton.Configuration.filled()
@@ -214,7 +261,14 @@ As a Senior Director, I lead cross-functional teams to craft user-centered digit
 
     // MARK: Actions
     @objc private func didTapBookSession() {
-        let vc = ScheduleSessionViewController() // ensure this exists in your project
+    let vc = ScheduleSessionViewController()
+    vc.mentor = self.mentor
+        // prefer detailed mentor areas if available
+        if let detail = mentorDetail, let areas = detail.mentorshipAreas {
+            vc.allowedAreas = areas
+        } else if let m = mentor, let areas = m.mentorshipAreas {
+            vc.allowedAreas = areas
+        }
         navigationController?.pushViewController(vc, animated: true)
     }
 
@@ -278,11 +332,12 @@ As a Senior Director, I lead cross-functional teams to craft user-centered digit
         mentorshipStack.axis = .vertical
         mentorshipStack.spacing = 8
 
-        let reviewsStack = UIStackView(arrangedSubviews: [reviewsTitle, reviewOne, reviewTwo, moreReviewsButton])
-        reviewsStack.axis = .vertical
-        reviewsStack.spacing = 12
+    // compose reviews section using dynamic reviewsStack (no 'view more' button)
+    let reviewsContainer = UIStackView(arrangedSubviews: [reviewsTitle, reviewsStack])
+    reviewsContainer.axis = .vertical
+    reviewsContainer.spacing = 12
 
-        let mainStack = UIStackView(arrangedSubviews: [headerStack, statsRow, aboutStack, mentorshipStack, reviewsStack])
+    let mainStack = UIStackView(arrangedSubviews: [headerStack, statsRow, aboutStack, mentorshipStack, reviewsContainer])
         mainStack.axis = .vertical
         mainStack.spacing = 18
 
@@ -329,6 +384,351 @@ As a Senior Director, I lead cross-functional teams to craft user-centered digit
             headerImageView.image = UIImage(systemName: "person.crop.rectangle")
             headerImageView.tintColor = .systemGray3
             headerImageView.contentMode = .center
+        }
+
+    // Fetch additional mentor details (prefer id when available)
+    Task { await fetchMentorDetailsIfNeeded(mentorId: mentor.id, byName: mentor.name) }
+    }
+
+    // MARK: - Networking / Supabase
+    private func fetchMentorDetailsIfNeeded(mentorId: String?, byName mentorName: String) async {
+        // Already loaded
+        if mentorDetail != nil { return }
+        do {
+            print("[MentorDetail] fetching details for: \(mentorName) id=\(String(describing: mentorId))")
+            // If we have id, prefer fetching by id
+            if let id = mentorId {
+                let resId = try await supabase.database
+                    .from("mentor_profiles")
+                    .select("id,display_name,about,mentorship_areas,rating,rating_count,profile_picture_url,metadata,yoe,session")
+                    .eq("id", value: id)
+                    .execute()
+                print("[MentorDetail] by-id response data=\(String(describing: resId.data))")
+                if let rowsId = try rowsArray(from: resId.data), !rowsId.isEmpty {
+                    if let firstRaw = rowsId.first as? [String: Any] {
+                        var mdJson: String? = nil
+                        if let meta = firstRaw["metadata"] {
+                            if let s = meta as? String { mdJson = s }
+                            else if let d = try? JSONSerialization.data(withJSONObject: meta), let s = String(data: d, encoding: .utf8) { mdJson = s }
+                        }
+                        let dataId = try JSONSerialization.data(withJSONObject: [firstRaw])
+                        let decoderId = JSONDecoder()
+                        decoderId.keyDecodingStrategy = .convertFromSnakeCase
+                        let detailsId = try decoderId.decode([MentorDetailRecord].self, from: dataId)
+                        if var first = detailsId.first {
+                            first.metadataJson = mdJson
+                            mentorDetail = first
+                            await applyMentorDetail(first)
+                            return
+                        }
+                    }
+                }
+            }
+
+            print("[MentorDetail] fetching details for: \(mentorName)")
+            // Try by display_name first
+            let res = try await supabase.database
+                .from("mentor_profiles")
+                .select("id,display_name,about,mentorship_areas,rating,rating_count,profile_picture_url,metadata,yoe,session")
+                .eq("display_name", value: mentorName)
+                .execute()
+
+            print("[MentorDetail] response data=\(String(describing: res.data))")
+
+            if let rows = try rowsArray(from: res.data), !rows.isEmpty {
+                if let firstRaw = rows.first as? [String: Any] {
+                    var mdJson: String? = nil
+                    if let meta = firstRaw["metadata"] {
+                        if let s = meta as? String { mdJson = s }
+                        else if let d = try? JSONSerialization.data(withJSONObject: meta), let s = String(data: d, encoding: .utf8) { mdJson = s }
+                    }
+                    let data = try JSONSerialization.data(withJSONObject: [firstRaw])
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    let details = try decoder.decode([MentorDetailRecord].self, from: data)
+                    if var first = details.first {
+                        first.metadataJson = mdJson
+                        mentorDetail = first
+                        await applyMentorDetail(first)
+                        return
+                    }
+                }
+            }
+            else {
+                print("[MentorDetail] no rows for display_name=\(mentorName)")
+            }
+            // Fallback: try a name column if different
+            let res2 = try await supabase.database
+                .from("mentor_profiles")
+                .select("id,display_name,about,mentorship_areas,rating,rating_count,profile_picture_url,metadata,yoe,session")
+                .eq("name", value: mentorName)
+                .execute()
+
+            print("[MentorDetail] fallback response data=\(String(describing: res2.data))")
+
+            if let rows2 = try rowsArray(from: res2.data), !rows2.isEmpty {
+                if let firstRaw = rows2.first as? [String: Any] {
+                    var mdJson: String? = nil
+                    if let meta = firstRaw["metadata"] {
+                        if let s = meta as? String { mdJson = s }
+                        else if let d = try? JSONSerialization.data(withJSONObject: meta), let s = String(data: d, encoding: .utf8) { mdJson = s }
+                    }
+                    let data = try JSONSerialization.data(withJSONObject: [firstRaw])
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    let details = try decoder.decode([MentorDetailRecord].self, from: data)
+                    if var first = details.first {
+                        first.metadataJson = mdJson
+                        mentorDetail = first
+                        await applyMentorDetail(first)
+                    }
+                }
+            } else {
+                print("[MentorDetail] no rows for name=\(mentorName)")
+                // Final fallback: fetch a batch and try a case-insensitive local match
+                let resAll = try await supabase.database
+                    .from("mentor_profiles")
+                    .select("id,display_name,about,mentorship_areas,rating,rating_count,profile_picture_url,metadata,yoe,session")
+                    .limit(100)
+                    .execute()
+                print("[MentorDetail] fallback batch data=\(String(describing: resAll.data))")
+                if let rowsAll = try rowsArray(from: resAll.data), !rowsAll.isEmpty {
+                    // Debug: print display_name and about for each row to help diagnose mismatches
+                    for (i, raw) in rowsAll.enumerated() {
+                        if let dict = raw as? [String: Any] {
+                            let dn = dict["display_name"] as? String ?? dict["name"] as? String ?? "(no name)"
+                            let about = dict["about"] as? String ?? "(no about)"
+                            print("[MentorDetail][batch][\(i)] display_name=\(dn), about=\(about.prefix(80))")
+                        } else {
+                            print("[MentorDetail][batch][\(i)] raw=\(raw)")
+                        }
+                    }
+                    
+                    // Try to find a match by inspecting any string field in each row
+                    for raw in rowsAll {
+                        if let dict = raw as? [String: Any] {
+                            // check any string value for a case-insensitive containment
+                            let lcTarget = mentorName.lowercased()
+                            var matches = false
+                            for (_, v) in dict {
+                                if let s = v as? String, s.lowercased().contains(lcTarget) {
+                                    matches = true
+                                    break
+                                }
+                                // handle array of strings (text[])
+                                if let arr = v as? [String] {
+                                    for item in arr {
+                                        if item.lowercased().contains(lcTarget) { matches = true; break }
+                                    }
+                                    if matches { break }
+                                }
+                            }
+                                    if matches {
+                                        // decode this single row into MentorDetailRecord
+                                        let rowData = try JSONSerialization.data(withJSONObject: dict)
+                                        let decoder = JSONDecoder()
+                                        decoder.keyDecodingStrategy = .convertFromSnakeCase
+                                        var foundDetail = try decoder.decode(MentorDetailRecord.self, from: rowData)
+                                        if let meta = dict["metadata"] {
+                                            if let s = meta as? String { foundDetail.metadataJson = s }
+                                            else if let d = try? JSONSerialization.data(withJSONObject: meta), let s = String(data: d, encoding: .utf8) { foundDetail.metadataJson = s }
+                                        }
+                                        mentorDetail = foundDetail
+                                        await applyMentorDetail(foundDetail)
+                                        return
+                                    }
+                        }
+                    }
+                }
+                // Nothing matched - inform user in UI
+                await MainActor.run {
+                    if self.aboutText.text?.isEmpty ?? true { self.aboutText.text = "Profile not found for \(mentorName)" }
+                }
+            }
+        } catch {
+            print("[MentorDetail] error fetching mentor details: \(error)")
+            await MainActor.run {
+                if self.aboutText.text?.isEmpty ?? true { self.aboutText.text = "Could not load profile." }
+                if self.mentorshipText.text?.isEmpty ?? true { self.mentorshipText.text = "" }
+            }
+            return
+        }
+    }
+
+    private func applyMentorDetail(_ detail: MentorDetailRecord) async {
+        await MainActor.run {
+            if let about = detail.about, !about.isEmpty {
+                self.aboutText.text = about
+            }
+            if let areas = detail.mentorshipAreas, !areas.isEmpty {
+                self.mentorshipText.text = areas.joined(separator: ", ")
+            }
+            if let count = detail.ratingCount {
+                self.reviewsCountLabel.text = "\(count) reviews"
+            }
+
+            // Show the numeric rating in the middle stat block and refresh stars
+            if let r = detail.rating {
+                self.mentorStatValueLabel.text = String(format: "%.1f", r)
+                self.updateStarsView(with: r)
+            } else if let r = self.mentor?.rating {
+                self.mentorStatValueLabel.text = String(format: "%.1f", r)
+                self.updateStarsView(with: r)
+            }
+
+            // Prefer direct columns (yoe, session) from the mentor_profiles table; fall back to metadata JSON
+            if let y = detail.yoe {
+                // yoe is numeric (Double) in the table
+                let intY = Int(y)
+                self.yearExpValueLabel.text = "\(intY)"
+            } else if let md = detail.metadataJson, !md.isEmpty, let data = md.data(using: .utf8) {
+                if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let yearKeys = ["years", "years_experience", "yearsOfExperience", "experience", "years_of_experience", "yearsexperience", "yearsExperience", "years_exp"]
+                    var yearVal: Int? = nil
+                    for k in yearKeys {
+                        if let v = obj[k] as? Int { yearVal = v; break }
+                        if let s = obj[k] as? String, let iv = Int(s) { yearVal = iv; break }
+                        if let d = obj[k] as? Double { yearVal = Int(d); break }
+                    }
+                    if let yv = yearVal { self.yearExpValueLabel.text = "\(yv)" }
+                }
+            }
+
+            if let s = detail.session {
+                self.sessionsValueLabel.text = "\(s)"
+            } else if let md = detail.metadataJson, !md.isEmpty, let data = md.data(using: .utf8) {
+                if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let sessionsKeys = ["sessions", "session_count", "sessions_count", "total_sessions", "totalSessions"]
+                    var sessionsVal: Int? = nil
+                    for k in sessionsKeys {
+                        if let v = obj[k] as? Int { sessionsVal = v; break }
+                        if let s = obj[k] as? String, let iv = Int(s) { sessionsVal = iv; break }
+                        if let d = obj[k] as? Double { sessionsVal = Int(d); break }
+                    }
+                    if let sv = sessionsVal { self.sessionsValueLabel.text = "\(sv)" }
+                }
+            }
+        }
+
+    if let urlString = detail.profilePictureUrl, let _ = URL(string: urlString) {
+            if let cached = BookViewController.imageCache.object(forKey: NSString(string: urlString)) {
+                await MainActor.run { self.headerImageView.image = cached; self.headerImageView.contentMode = .scaleAspectFill }
+            } else {
+                if let img = await downloadImage(from: urlString) {
+                    BookViewController.imageCache.setObject(img, forKey: NSString(string: urlString))
+                    await MainActor.run { self.headerImageView.image = img; self.headerImageView.contentMode = .scaleAspectFill }
+                }
+            }
+        }
+
+        // Populate stats: sessions count and mentor rating
+        if let mentorId = detail.id {
+            Task {
+                print("[MentorDetail] fetching sessions/reviews for mentorId=\(mentorId)")
+                let sessionsCount = await fetchSessionsCount(for: mentorId)
+                print("[MentorDetail] sessionsCount=\(sessionsCount)")
+                await MainActor.run {
+                    if sessionsCount > 0 {
+                            // update the sessions stat label text inside the blocks
+                            self.sessionsValueLabel.text = "\(sessionsCount)"
+                            // also ensure the reviews count label is populated
+                            self.reviewsCountLabel.text = detail.ratingCount != nil ? "\(detail.ratingCount!) reviews" : self.reviewsCountLabel.text
+                    }
+                }
+
+                let reviews = await fetchRecentReviews(for: mentorId, limit: 3)
+                print("[MentorDetail] reviews fetched count=\(reviews.count)")
+                await MainActor.run {
+                    // Clear existing assembled review views
+                    while !self.reviewsStack.arrangedSubviews.isEmpty {
+                        let v = self.reviewsStack.arrangedSubviews[0]
+                        self.reviewsStack.removeArrangedSubview(v)
+                        v.removeFromSuperview()
+                    }
+                    for r in reviews {
+                        let avatarImg = UIImage(systemName: "person.circle")
+                        let rv = reviewView(avatar: avatarImg,
+                                            name: r.authorName ?? "",
+                                            timeAgo: r.createdAt ?? "",
+                                            rating: r.rating ?? 0,
+                                            text: r.content ?? "")
+                        self.reviewsStack.addArrangedSubview(rv)
+                    }
+                    if reviews.isEmpty {
+                        let empty = UILabel()
+                        empty.text = "No reviews yet"
+                        empty.font = .systemFont(ofSize: 13)
+                        empty.textColor = .secondaryLabel
+                        self.reviewsStack.addArrangedSubview(empty)
+                    }
+                }
+            }
+        }
+    }
+
+    private func fetchSessionsCount(for mentorId: String) async -> Int {
+        do {
+            let res = try await supabase.database
+                .from("mentorship_sessions")
+                .select("id")
+                .eq("mentor_id", value: mentorId)
+                .execute()
+            print("[fetchSessionsCount] res.data=\(String(describing: res.data))")
+            if let rows = res.data as? [Any] {
+                return rows.count
+            }
+        } catch {
+            print("[fetchSessionsCount] error: \(error)")
+            return 0
+        }
+        return 0
+    }
+
+    private func fetchRecentReviews(for mentorId: String, limit: Int = 3) async -> [ReviewRecord] {
+        do {
+            // select all columns to be tolerant to schema differences; we'll extract needed fields
+            let res = try await supabase.database
+                .from("session_reviews")
+                .select()
+                .eq("mentor_id", value: mentorId)
+                .order("created_at", ascending: false)
+                .limit(limit)
+                .execute()
+
+            print("[fetchRecentReviews] res.data=\(String(describing: res.data))")
+
+            if let rows = try rowsArray(from: res.data), !rows.isEmpty {
+                // Build ReviewRecord objects manually from dictionaries to tolerate column name mismatches
+                var result: [ReviewRecord] = []
+                for r in rows {
+                    if let dict = r as? [String: Any] {
+                        let id = dict["id"] as? String
+                        // tolerant keys: author_name or authorName
+                        let author = (dict["author_name"] as? String) ?? (dict["authorName"] as? String) ?? (dict["author"] as? String)
+                        let created = (dict["created_at"] as? String) ?? (dict["createdAt"] as? String)
+                        let rating = dict["rating"] as? Int ?? (dict["rating"] as? Int)
+                        let content = (dict["content"] as? String) ?? (dict["body"] as? String)
+                        let avatar = (dict["avatar_url"] as? String) ?? (dict["avatarUrl"] as? String)
+                        let rr = ReviewRecord(id: id, authorName: author, createdAt: created, rating: rating, content: content, avatarUrl: avatar)
+                        result.append(rr)
+                    }
+                }
+                return result
+            }
+        } catch {
+            print("[fetchRecentReviews] error: \(error)")
+            return []
+        }
+        return []
+    }
+
+    private func downloadImage(from urlString: String) async -> UIImage? {
+        guard let url = URL(string: urlString) else { return nil }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            return UIImage(data: data)
+        } catch {
+            return nil
         }
     }
 
@@ -429,4 +829,23 @@ private func reviewView(avatar: UIImage?, name: String, timeAgo: String, rating:
     container.addArrangedSubview(stars)
     container.addArrangedSubview(textLabel)
     return container
+}
+
+// Normalize response.data into an array of Any for decoding. Supabase client's PostgrestResponse.data
+// can sometimes be already an array of dictionaries or raw JSON data; this helper handles both.
+private func rowsArray(from raw: Any?) throws -> [Any]? {
+    guard let raw = raw else { return nil }
+    // If it's already an array, return it
+    if let arr = raw as? [Any] { return arr }
+    // If it's Data representing JSON, try to decode
+    if let data = raw as? Data {
+        let json = try JSONSerialization.jsonObject(with: data)
+        if let arr = json as? [Any] { return arr }
+    }
+    // If it's a string of JSON, attempt to parse
+    if let s = raw as? String, let data = s.data(using: .utf8) {
+        let json = try JSONSerialization.jsonObject(with: data)
+        if let arr = json as? [Any] { return arr }
+    }
+    return nil
 }

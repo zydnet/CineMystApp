@@ -15,12 +15,7 @@ import UIKit
 import UniformTypeIdentifiers
 import ObjectiveC
 
-// MARK: - Mentorship Enum
-enum MentorshipArea: String, CaseIterable {
-    case acting = "Acting"
-    case dubbing = "Dubbing"
-    case portfolio = "Portfolio"
-}
+// Mentorship areas are now driven from the backend (fetched at runtime)
 
 final class ScheduleSessionViewController: UIViewController {
 
@@ -29,8 +24,13 @@ final class ScheduleSessionViewController: UIViewController {
     private let accentGray = UIColor(white: 0.4, alpha: 1.0)
 
     // MARK: - State
-    /// Allow multiple selection now
-    private var selectedAreas: Set<MentorshipArea> = []
+    /// Allow multiple selection now - areas are dynamic strings (names)
+    private var fetchedAreas: [String] = []
+    private var selectedAreas: Set<String> = []
+    /// If set by the caller, only these areas will be shown (from the mentor's profile)
+    public var allowedAreas: [String]? = nil
+    /// Optional mentor passed from the detail screen so downstream flows can use it
+    public var mentor: Mentor? = nil
     private var selectedTimeButton: UIButton?
     /// Date will be nil until user explicitly picks a date via the sheet
     private var selectedDate: Date?
@@ -146,11 +146,37 @@ final class ScheduleSessionViewController: UIViewController {
 
         view.tintColor = accentGray
         setupLayout()
-        buildMentorshipChips()
+    Task { await loadMentorshipAreas() }
         wireActions()
 
         // start with no date chosen -> no timeSlots in the stack
         updateDateHeaderTitle()
+    }
+
+    private func loadMentorshipAreas() async {
+        // If the caller provided allowed areas (from the mentor detail), use them directly.
+        if let allowed = allowedAreas, !allowed.isEmpty {
+            let sorted = allowed.sorted()
+            DispatchQueue.main.async {
+                self.fetchedAreas = sorted
+                self.buildMentorshipChips()
+            }
+            return
+        }
+
+        // fetch mentors and extract unique areas (fallback)
+        let mentors = await MentorsProvider.fetchAll()
+        var areasSet: Set<String> = []
+        for m in mentors {
+            if let a = m.mentorshipAreas {
+                for item in a { areasSet.insert(item) }
+            }
+        }
+        let sorted = Array(areasSet).sorted()
+        DispatchQueue.main.async {
+            self.fetchedAreas = sorted
+            self.buildMentorshipChips()
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -172,9 +198,9 @@ final class ScheduleSessionViewController: UIViewController {
     // MARK: - Mentorship chips
     private func buildMentorshipChips() {
         mentorshipStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for area in MentorshipArea.allCases {
-            let btn = makeChipButton(title: area.rawValue)
-            btn.tag = areaTag(area)
+        for (idx, area) in fetchedAreas.enumerated() {
+            let btn = makeChipButton(title: area)
+            btn.tag = 1000 + idx // offset to avoid collisions
             // reflect any previously selected areas (if restoring state)
             if selectedAreas.contains(area) { setChip(btn, selected: true) }
             mentorshipStack.addArrangedSubview(btn)
@@ -198,14 +224,17 @@ final class ScheduleSessionViewController: UIViewController {
     @objc private func chooseMentorship(_ sender: UIButton) {
         // Toggle selection for multi-select behavior
         let isCurrentlySelected = sender.backgroundColor == plum.withAlphaComponent(0.10)
+        let idx = sender.tag - 1000
+        guard idx >= 0 && idx < fetchedAreas.count else { return }
+        let area = fetchedAreas[idx]
         if isCurrentlySelected {
             // deselect
             setChip(sender, selected: false)
-            if let area = areaFromTag(sender.tag) { selectedAreas.remove(area) }
+            selectedAreas.remove(area)
         } else {
             // select (do NOT clear other selections)
             setChip(sender, selected: true)
-            if let area = areaFromTag(sender.tag) { selectedAreas.insert(area) }
+            selectedAreas.insert(area)
         }
     }
 
@@ -221,8 +250,6 @@ final class ScheduleSessionViewController: UIViewController {
         }
     }
 
-    private func areaTag(_ a: MentorshipArea) -> Int { a == .acting ? 1 : (a == .dubbing ? 2 : 3) }
-    private func areaFromTag(_ t: Int) -> MentorshipArea? { [1:.acting,2:.dubbing,3:.portfolio][t] }
 
     // MARK: - Actions wiring
     private func wireActions() {
@@ -240,11 +267,12 @@ final class ScheduleSessionViewController: UIViewController {
             return alert("Pick a time", "Please choose an available time slot.")
         }
 
-        // Preserve the original ordering from MentorshipArea.allCases
-        let selectedOrdered = MentorshipArea.allCases.filter { selectedAreas.contains($0) }
-        let areaString = selectedOrdered.map { $0.rawValue }.joined(separator: ", ")
+    // Preserve a stable ordering by sorting selected areas alphabetically
+    let selectedOrdered = Array(selectedAreas).sorted()
+    let areaString = selectedOrdered.joined(separator: ", ")
 
-        let vc = PaymentViewController(area: areaString, date: chosenDate, time: selectedTimeButton.currentTitle ?? "")
+    let vc = PaymentViewController(area: areaString, date: chosenDate, time: selectedTimeButton.currentTitle ?? "")
+    vc.mentor = self.mentor
         navigationController?.pushViewController(vc, animated: true)
     }
 

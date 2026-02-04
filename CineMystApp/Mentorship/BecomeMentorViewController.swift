@@ -7,6 +7,7 @@
 
 import UIKit
 import PhotosUI
+import Supabase
 
 // MARK: - BecomeMentorViewController
 final class BecomeMentorViewController: UITableViewController {
@@ -497,52 +498,134 @@ final class BecomeMentorViewController: UITableViewController {
             return
         }
 
-        // on success show alert then push MentorPanelViewController
-        showAlert(title: "Submitted", message: "Your profile has been submitted.") { [weak self] in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
+        // save to backend then navigate
+        Task { await submitToBackendAndNavigate() }
+    }
 
-                // Create mentor panel
-                let mentorPanel = MentorPanelViewController()
+    private func setSubmitting(_ submitting: Bool) {
+        DispatchQueue.main.async {
+            self.submitButton.isEnabled = !submitting
+            self.submitButton.alpha = submitting ? 0.7 : 1.0
+        }
+    }
 
-                // -------------------------
-                // IMPORTANT: push into the Mentorship tab's nav stack so the tab bar stays visible.
-                // Your CineMystTabBarController sets the Mentorship tab at index 3.
-                // -------------------------
+    private func submitToBackendAndNavigate() async {
+        setSubmitting(true)
+        defer { setSubmitting(false) }
 
-                if let tabBar = self.tabBarController {
-                    let mentorshipIndex = 3
-                    if mentorshipIndex < (tabBar.viewControllers?.count ?? 0),
-                       let mentorNav = tabBar.viewControllers?[mentorshipIndex] as? UINavigationController {
-                        // Build the desired stack: keep MentorshipHome then MentorPanel on top.
-                        let home = MentorshipHomeViewController()
-                        mentorNav.setViewControllers([home, mentorPanel], animated: true)
-                        tabBar.selectedIndex = mentorshipIndex
-                        return
-                    }
+        // Build payload as a concrete Encodable struct (Supabase client expects Encodable)
+        let areas = Array(form.mentorshipAreas.keys)
 
-                    // Fallback: find first UINavigationController in tab bar, push there and switch tab
-                    if let vcs = tabBar.viewControllers {
-                        for (idx, vc) in vcs.enumerated() {
-                            if let nav = vc as? UINavigationController {
-                                nav.pushViewController(mentorPanel, animated: true)
-                                tabBar.selectedIndex = idx
+        // Flatten metadata into [String:String] — prices are encoded as JSON string under "prices_json"
+        var metadataFlat: [String: String] = [:]
+        if !form.mentorshipAreas.isEmpty {
+            if let data = try? JSONSerialization.data(withJSONObject: form.mentorshipAreas), let s = String(data: data, encoding: .utf8) {
+                metadataFlat["prices_json"] = s
+            }
+        }
+        if let years = form.years { metadataFlat["years"] = years }
+        if let org = form.organisation { metadataFlat["organisation"] = org }
+        if let langs = form.languages { metadataFlat["languages"] = langs }
+        if let city = form.city { metadataFlat["city"] = city }
+        if let country = form.country { metadataFlat["country"] = country }
+
+        // Helper: map human-friendly years string to an integer yoe value
+        func mapYearsToYOE(_ years: String?) -> Int? {
+            guard let y = years?.trimmingCharacters(in: .whitespacesAndNewlines), !y.isEmpty else { return nil }
+            switch y {
+            case "<1": return 0
+            case "1–3", "1-3", "1 to 3": return 1
+            case "3–5", "3-5": return 3
+            case "5+": return 5
+            default:
+                // try to extract any leading integer
+                let digits = y.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+                return Int(digits)
+            }
+        }
+
+        struct MentorInsert: Encodable {
+            let display_name: String
+            let name: String
+            let role: String
+            let about: String
+            let mentorship_areas: [String]
+            let metadata: [String: String]?
+            let rating: Double
+            let rating_count: Int
+            let yoe: Int?
+        }
+
+        let insertItem = MentorInsert(
+            display_name: form.fullName ?? "",
+            name: form.fullName ?? "",
+            role: form.professionalTitle ?? "",
+            about: form.about ?? "",
+            mentorship_areas: areas,
+            metadata: metadataFlat.isEmpty ? nil : metadataFlat,
+            rating: 0.0,
+            rating_count: 0,
+            yoe: mapYearsToYOE(form.years)
+        )
+
+        do {
+            let res = try await supabase.database
+                .from("mentor_profiles")
+                .insert(insertItem)
+                .select()
+                .execute()
+
+            // Ensure the insert returned rows (some SDKs embed errors instead of throwing).
+            var returnedRows: [Any] = []
+            if let rows = try? MentorsProvider.rowsArray(from: res.data) {
+                returnedRows = rows
+            }
+            if returnedRows.isEmpty {
+                await MainActor.run {
+                    showAlert(title: "Save failed", message: "No rows returned from insert.")
+                }
+                return
+            }
+
+            // Success: navigate same as before
+            await MainActor.run {
+                showAlert(title: "Submitted", message: "Your profile has been submitted.") { [weak self] in
+                    guard let self = self else { return }
+                    DispatchQueue.main.async {
+                        // Create mentor panel
+                        let mentorPanel = MentorPanelViewController()
+                        if let tabBar = self.tabBarController {
+                            let mentorshipIndex = 3
+                            if mentorshipIndex < (tabBar.viewControllers?.count ?? 0),
+                               let mentorNav = tabBar.viewControllers?[mentorshipIndex] as? UINavigationController {
+                                let home = MentorshipHomeViewController()
+                                mentorNav.setViewControllers([home, mentorPanel], animated: true)
+                                tabBar.selectedIndex = mentorshipIndex
                                 return
                             }
+                            if let vcs = tabBar.viewControllers {
+                                for (idx, vc) in vcs.enumerated() {
+                                    if let nav = vc as? UINavigationController {
+                                        nav.pushViewController(mentorPanel, animated: true)
+                                        tabBar.selectedIndex = idx
+                                        return
+                                    }
+                                }
+                            }
                         }
+                        if let nav = self.navigationController {
+                            nav.pushViewController(mentorPanel, animated: true)
+                            return
+                        }
+                        let modal = UINavigationController(rootViewController: mentorPanel)
+                        modal.modalPresentationStyle = .fullScreen
+                        self.present(modal, animated: true, completion: nil)
                     }
                 }
-
-                // Final fallback: push on local navigation controller (may hide tab bar)
-                if let nav = self.navigationController {
-                    nav.pushViewController(mentorPanel, animated: true)
-                    return
-                }
-
-                // Last resort: present modally
-                let modal = UINavigationController(rootViewController: mentorPanel)
-                modal.modalPresentationStyle = .fullScreen
-                self.present(modal, animated: true, completion: nil)
+            }
+        } catch {
+            await MainActor.run {
+                showAlert(title: "Save failed", message: String(describing: error))
             }
         }
     }

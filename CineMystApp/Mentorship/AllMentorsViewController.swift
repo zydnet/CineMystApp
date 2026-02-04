@@ -8,6 +8,7 @@
 //
 
 import UIKit
+import Supabase
 
 // MARK: - MentorCardCell (tightened layout + aligned rating)
 final class MentorCardCell: UITableViewCell {
@@ -246,18 +247,45 @@ final class MentorCardCell: UITableViewCell {
     func configure(with mentor: Mentor) {
         nameLabel.text = mentor.name
         roleLabel.text = mentor.role
-        orgLabel.text = "YRF Casting House\nTotal sessions 29"
 
+        // orgName (casting house) and session count
+        if let org = mentor.orgName, let sessions = mentor.sessionCount {
+            orgLabel.text = "\(org)\nTotal sessions \(sessions)"
+        } else if let org = mentor.orgName {
+            orgLabel.text = org
+        } else {
+            orgLabel.text = ""
+        }
+
+        // rating and reviews
         ratingLabel.text = String(format: "%.1f", mentor.rating)
-        reviewsLabel.text = "12 reviews"
-        priceLabel.text = "₹ 5k/hr"
+    // hide review count per request
+    reviewsLabel.isHidden = true
 
+        // price from `money` column if present
+        priceLabel.text = mentor.moneyString ?? ""
+
+        // local fallback
         photoView.image = UIImage(named: mentor.imageName ?? "Image")
 
-        // tags — plain text (no background)
+        // load remote profile picture if present
+        if let urlString = mentor.profilePictureUrl, let url = URL(string: urlString) {
+            Task {
+                do {
+                    let (data, _) = try await URLSession.shared.data(from: url)
+                    if let img = UIImage(data: data) {
+                        await MainActor.run { self.photoView.image = img }
+                    }
+                } catch {
+                    // ignore, keep fallback image
+                }
+            }
+        }
+
+        // tags — use mentorshipAreas if present
         tagsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let tagNames = ["Acting", "Direction"]
-        for t in tagNames {
+        let tagNames = mentor.mentorshipAreas ?? []
+        for t in tagNames.prefix(4) {
             let label = makePlainTagLabel(text: t)
             tagsStack.addArrangedSubview(label)
         }
@@ -344,13 +372,27 @@ final class AllMentorsViewController: UIViewController {
         return tv
     }()
 
+    private let emptyLabel: UILabel = {
+        let l = UILabel()
+        l.text = "No mentors found"
+        l.textColor = .secondaryLabel
+        l.font = UIFont.systemFont(ofSize: 16)
+        l.textAlignment = .center
+        l.numberOfLines = 0
+        l.isHidden = true
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }()
+
+    private let spinner: UIActivityIndicatorView = {
+        let s = UIActivityIndicatorView(style: .large)
+        s.hidesWhenStopped = true
+        s.translatesAutoresizingMaskIntoConstraints = false
+        return s
+    }()
+
     // Keep a full source and a filtered view
-    private var allMentors: [Mentor] = [
-        Mentor(name: "Amit Sawi", role: "Senior Director", rating: 4.9),
-        Mentor(name: "Sanya Mandal", role: "Actor", rating: 4.9),
-        Mentor(name: "Charlie Day", role: "Dubbing Artist", rating: 4.9),
-        // add more mentors here as needed
-    ]
+    private var allMentors: [Mentor] = []
 
     // mentors is the filtered array used by tableView
     private var mentors: [Mentor] = []
@@ -382,6 +424,34 @@ final class AllMentorsViewController: UIViewController {
         // initial data (show all)
         mentors = allMentors
         tableView.reloadData()
+
+        // fetch from backend
+        fetchMentorsFromBackend()
+    }
+
+    // MARK: - Backend
+    // Uses shared `supabase` client from `auth/Supabase.swift`
+    private let supabaseClient = supabase
+
+    private func fetchMentorsFromBackend() {
+        spinner.startAnimating()
+        emptyLabel.isHidden = true
+
+        Task {
+            let fetched = await MentorsProvider.fetchAll()
+            await MainActor.run {
+                self.spinner.stopAnimating()
+                self.allMentors = fetched
+                self.mentors = fetched
+                self.tableView.reloadData()
+
+                if fetched.isEmpty {
+                    self.emptyLabel.text = "No mentors found"
+                    self.emptyLabel.isHidden = false
+                    self.addEmptyLabelTap()
+                }
+            }
+        }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -447,6 +517,18 @@ final class AllMentorsViewController: UIViewController {
         print("Search tapped")
     }
 
+    private func addEmptyLabelTap() {
+        emptyLabel.isUserInteractionEnabled = true
+        let tap = UITapGestureRecognizer(target: self, action: #selector(retryFetch))
+        emptyLabel.gestureRecognizers?.forEach { emptyLabel.removeGestureRecognizer($0) }
+        emptyLabel.addGestureRecognizer(tap)
+    }
+
+    @objc private func retryFetch() {
+        emptyLabel.isHidden = true
+        fetchMentorsFromBackend()
+    }
+
     private func setupHierarchy() {
         view.addSubview(backButton)
         view.addSubview(titleLabel)
@@ -455,6 +537,8 @@ final class AllMentorsViewController: UIViewController {
         view.addSubview(segmented)
         view.addSubview(subtitleLabel)
         view.addSubview(tableView)
+    view.addSubview(emptyLabel)
+    view.addSubview(spinner)
     }
 
     private func setupConstraints() {
@@ -490,6 +574,20 @@ final class AllMentorsViewController: UIViewController {
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+
+        // emptyLabel centered
+        NSLayoutConstraint.activate([
+            emptyLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            emptyLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 40),
+            emptyLabel.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
+            emptyLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24)
+        ])
+
+        // spinner centered in table area
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            spinner.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 80)
         ])
     }
 

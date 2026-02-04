@@ -316,12 +316,7 @@ final class PostBookingMentorshipViewController: UIViewController {
     // data
     private var sessions: [SessionM] = []
     private var calls: [Call] = []
-    private var mentors: [Mentor] = [
-        Mentor(name: "Nathan Hales", role: "Actor", rating: 4.9, imageName: "Image"),
-        Mentor(name: "Ava Johnson", role: "Casting Director", rating: 4.8, imageName: "Image"),
-        Mentor(name: "Maya Patel", role: "Actor", rating: 5.0, imageName: "Image"),
-        Mentor(name: "Riya Sharma", role: "Actor", rating: 4.9, imageName: "Image")
-    ]
+    private var mentors: [Mentor] = []
 
     private var sessionsTableHeightConstraint: NSLayoutConstraint!
 
@@ -341,6 +336,13 @@ final class PostBookingMentorshipViewController: UIViewController {
 
         // ensure UI matches selected segment at startup
         segmentChanged(segmentControl)
+
+        // Load mentors from backend
+        Task {
+            let fetched = await MentorsProvider.fetchAll()
+            self.mentors = fetched
+            self.collectionView.reloadData()
+        }
 
         NotificationCenter.default.addObserver(self, selector: #selector(didReceiveSessionNotification(_:)), name: .sessionUpdated, object: nil)
     }

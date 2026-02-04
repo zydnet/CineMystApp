@@ -15,13 +15,7 @@ final class PaymentConfirmationViewController: UIViewController {
     var mentor: Mentor?
     var scheduledDate: Date?
 
-    // demo mentors if real mentor missing
-    private let demoMentors: [Mentor] = [
-        Mentor(name: "Nathan Hales", role: "Actor", rating: 4.8, imageName: "Image"),
-        Mentor(name: "Ava Johnson", role: "Casting Director", rating: 4.9, imageName: "Image"),
-        Mentor(name: "Maya Patel", role: "Actor", rating: 5.0, imageName: "Image"),
-        Mentor(name: "Riya Sharma", role: "Actor", rating: 4.9, imageName: "Image")
-    ]
+    // no static demo mentors; if a mentor isn't passed, fetch one from backend
 
     // UI
     private let dimView: UIView = {
@@ -101,11 +95,40 @@ final class PaymentConfirmationViewController: UIViewController {
         dimView.addGestureRecognizer(tap)
 
         print("[PaymentConfirmation] presented mentor=\(String(describing: mentor?.name)) scheduledDate=\(String(describing: scheduledDate))")
+
+        // If mentor not provided, fetch one from backend as a fallback
+        if mentor == nil {
+            Task {
+                let fetched = await MentorsProvider.fetchAll()
+                if let first = fetched.first {
+                    self.mentor = first
+                    print("[PaymentConfirmation] fallback mentor loaded: \(first.name)")
+                }
+            }
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         animateIn()
+    }
+
+    // Simple entrance animation for the modal card
+    private func animateIn() {
+        cardView.transform = CGAffineTransform(scaleX: 0.92, y: 0.92).concatenating(CGAffineTransform(translationX: 0, y: 20))
+        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseOut]) { self.dimView.alpha = 1.0 }
+        UIView.animate(withDuration: 0.32, delay: 0.06, usingSpringWithDamping: 0.82, initialSpringVelocity: 0.8, options: []) {
+            self.cardView.transform = .identity
+        }
+    }
+
+    // Exit animation for the modal card
+    private func animateOut(completion: (() -> Void)? = nil) {
+        UIView.animate(withDuration: 0.18, animations: {
+            self.cardView.transform = CGAffineTransform(scaleX: 0.96, y: 0.96).concatenating(CGAffineTransform(translationX: 0, y: 8))
+            self.dimView.alpha = 0
+            self.cardView.alpha = 0
+        }) { _ in completion?() }
     }
 
     private func setupViews() {
@@ -157,32 +180,25 @@ final class PaymentConfirmationViewController: UIViewController {
         ])
     }
 
-    private func animateIn() {
-        cardView.transform = CGAffineTransform(scaleX: 0.92, y: 0.92).concatenating(CGAffineTransform(translationX: 0, y: 20))
-        UIView.animate(withDuration: 0.25, delay: 0, options: [.curveEaseOut]) { self.dimView.alpha = 1.0 }
-        UIView.animate(withDuration: 0.32, delay: 0.06, usingSpringWithDamping: 0.82, initialSpringVelocity: 0.8, options: []) {
-            self.cardView.transform = .identity
-        }
-    }
-
-    private func animateOut(completion: (() -> Void)? = nil) {
-        UIView.animate(withDuration: 0.18, animations: {
-            self.cardView.transform = CGAffineTransform(scaleX: 0.96, y: 0.96).concatenating(CGAffineTransform(translationX: 0, y: 8))
-            self.dimView.alpha = 0
-            self.cardView.alpha = 0
-        }) { _ in completion?() }
-    }
-
-    // MARK: Actions
     @objc private func didTapDone() {
-        // choose mentor (provided or demo)
-        let usedMentor: Mentor
-        if let m = mentor { usedMentor = m; print("[PaymentConfirmation] using provided mentor: \(m.name)") }
-        else {
-            usedMentor = demoMentors.randomElement()!
-            print("[PaymentConfirmation] mentor nil — using demo: \(usedMentor.name)")
+        // If mentor was passed in, proceed synchronously. If not, fetch one from backend
+        if let m = mentor {
+            print("[PaymentConfirmation] using provided mentor: \(m.name)")
+            Task { await completeBooking(with: m) }
+            return
         }
 
+        // mentor not provided — fetch first available mentor from backend and complete
+        Task {
+            let fetched = await MentorsProvider.fetchAll()
+            let used = fetched.first ?? Mentor(id: nil, name: "Unknown", role: "", rating: 0.0, imageName: "Image")
+            print("[PaymentConfirmation] fetched fallback mentor: \(used.name)")
+            await completeBooking(with: used)
+        }
+    }
+
+    @MainActor
+    private func completeBooking(with usedMentor: Mentor) async {
         // choose date (provided or now)
         let usedDate = scheduledDate ?? Date()
         if scheduledDate == nil { print("[PaymentConfirmation] scheduledDate nil — using now: \(usedDate)") }
@@ -205,15 +221,15 @@ final class PaymentConfirmationViewController: UIViewController {
         animateOut { [weak self] in
             guard let self = self else { return }
             self.dismiss(animated: false) {
-                // Now that the confirmation is dismissed, replace the Mentorship tab
-                DispatchQueue.main.async {
-                    self.replaceMentorshipTabWithPostBookingScreen()
-                    // call onDone after nav replacement so caller can react to navigation
-                    self.onDone?()
-                }
+                // replace Mentorship tab with the updated flow
+                // replace Mentorship tab by using our helper which searches and swaps
+                self.replaceMentorshipTabWithPostBookingScreen()
+                self.onDone?()
             }
         }
     }
+        // Animate out, then dismiss this modal, then replace the Mentorship tab.
+        
 
     @objc private func dimTapped(_ g: UITapGestureRecognizer) { didTapDone() }
 
