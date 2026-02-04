@@ -492,7 +492,7 @@ class ApplicationsViewController: UIViewController {
                 }
                 
                 let portfolio: ActorPortfolio = try await supabase
-                    .from("actor_portfolios")
+                    .from("portfolios") 
                     .select("id, user_id")
                     .eq("user_id", value: actorId.uuidString)
                     .single()

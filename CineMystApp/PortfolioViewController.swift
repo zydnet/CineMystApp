@@ -187,7 +187,7 @@ class PortfolioViewController: UIViewController {
                     // Viewing another user's portfolio - use provided portfolioId
                     // First, fetch the portfolio to get the user_id
                     let portfolioResponse = try await supabase
-                        .from("actor_portfolios")
+                        .from("portfolios")
                         .select("user_id")
                         .eq("id", value: portfolioId)
                         .single()
@@ -212,7 +212,7 @@ class PortfolioViewController: UIViewController {
                 
                 // Fetch portfolio
                 let portfolioResponse = try await supabase
-                    .from("actor_portfolios")
+                    .from("portfolios") 
                     .select()
                     .eq("user_id", value: userId)
                     .eq("is_primary", value: true)
