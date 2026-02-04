@@ -189,22 +189,45 @@ final class AuthManager {
         let username = profileData.username ?? userEmail.components(separatedBy: "@").first ?? "user\(Int.random(in: 1000...9999))"
         let fullName = profileData.fullName
         
-        // Create profile struct for encoding
+        // Determine if onboarding is complete (only if role is set)
+        let onboardingCompleted = profileData.role != nil
+        
+        // Format date of birth
+        let dateOfBirthStr = profileData.dateOfBirth.map {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: $0)
+        }
+        
+        // Format role (convert to database format: artist or casting_professional)
+        let roleStr = profileData.role?.rawValue.lowercased().replacingOccurrences(of: " ", with: "_")
+        
+        // Get current timestamp for lastActiveAt
+        let dateFormatter = ISO8601DateFormatter()
+        let now = dateFormatter.string(from: Date())
+        
+        // Create profile struct for encoding with all new fields
         let profile = ProfileRecordForSave(
             id: userId.uuidString,
             username: username,
+            email: userEmail,
             fullName: fullName,
-            dateOfBirth: profileData.dateOfBirth.map {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd"
-                return formatter.string(from: $0)
-            },
+            dateOfBirth: dateOfBirthStr,
             profilePictureUrl: profilePictureURL,
-            role: profileData.role?.rawValue.lowercased().replacingOccurrences(of: " ", with: "_") ?? "",
+            avatarUrl: profilePictureURL,
+            role: roleStr,
             employmentStatus: profileData.employmentStatus,
             locationState: profileData.locationState,
             postalCode: profileData.postalCode,
-            locationCity: profileData.locationCity
+            locationCity: profileData.locationCity,
+            bio: nil,
+            phoneNumber: nil,
+            websiteUrl: nil,
+            isVerified: false,
+            connectionCount: 0,
+            onboardingCompleted: onboardingCompleted,
+            lastActiveAt: now,
+            bannerUrl: nil  // ✅ ADD THIS LINE
         )
         
         do {
@@ -215,6 +238,8 @@ final class AuthManager {
             print("✅ Profile saved to database")
             print("   Username: \(username)")
             print("   Full Name: \(fullName ?? "nil")")
+            print("   Onboarding Completed: \(onboardingCompleted)")
+            print("   Role: \(roleStr ?? "nil")")
         } catch {
             print("❌ Database error saving profile: \(error)")
             throw error
@@ -281,28 +306,48 @@ final class AuthManager {
 struct ProfileRecordForSave: Encodable {
     let id: String
     let username: String?
+    let email: String?
     let fullName: String?
     let dateOfBirth: String?
     let profilePictureUrl: String?
-    let role: String
+    let avatarUrl: String?
+    let role: String?
     let employmentStatus: String?
     let locationState: String?
     let postalCode: String?
     let locationCity: String?
+    let bio: String?
+    let phoneNumber: String?
+    let websiteUrl: String?
+    let isVerified: Bool?
+    let connectionCount: Int?
+    let onboardingCompleted: Bool?
+    let lastActiveAt: String?
+    var bannerUrl: String?
     
     enum CodingKeys: String, CodingKey {
-        case id
-        case username
-        case fullName = "full_name"
-        case dateOfBirth = "date_of_birth"
-        case profilePictureUrl = "profile_picture_url"
-        case role
-        case employmentStatus = "employment_status"
-        case locationState = "location_state"
-        case postalCode = "postal_code"
-        case locationCity = "location_city"
+            case id
+            case username
+            case email
+            case fullName = "full_name"
+            case dateOfBirth = "date_of_birth"
+            case profilePictureUrl = "profile_picture_url"
+            case avatarUrl = "avatar_url"
+            case role
+            case employmentStatus = "employment_status"
+            case locationState = "location_state"
+            case postalCode = "postal_code"
+            case locationCity = "location_city"
+            case bio
+            case phoneNumber = "phone_number"
+            case websiteUrl = "website_url"
+            case isVerified = "is_verified"
+            case connectionCount = "connection_count"
+            case onboardingCompleted = "onboarding_completed"
+            case lastActiveAt = "last_active_at"
+            case bannerUrl = "banner_url" // ✅ ADD THIS LINE
+        }
     }
-}
 
 struct ArtistProfileRecordForSave: Encodable {
     let id: String
@@ -342,32 +387,53 @@ struct CastingProfileRecordForSave: Encodable {
 struct ProfileRecord: Codable {
     let id: String
     let username: String?
+    let email: String?
     let fullName: String?
     let dateOfBirth: String?
     let profilePictureUrl: String?
-    let role: String
+    let avatarUrl: String?
+    let role: String?
     let employmentStatus: String?
     let locationState: String?
     let postalCode: String?
     let locationCity: String?
+    let bio: String?
+    let phoneNumber: String?
+    let websiteUrl: String?
+    let isVerified: Bool?
+    let connectionCount: Int?
+    let onboardingCompleted: Bool?
     let createdAt: String?
     let updatedAt: String?
+    let lastActiveAt: String?
+    var bannerUrl: String? // ✅ NEW: Banner image URL
     
     enum CodingKeys: String, CodingKey {
         case id
         case username
+        case email
         case fullName = "full_name"
         case dateOfBirth = "date_of_birth"
         case profilePictureUrl = "profile_picture_url"
+        case avatarUrl = "avatar_url"
         case role
         case employmentStatus = "employment_status"
         case locationState = "location_state"
         case postalCode = "postal_code"
         case locationCity = "location_city"
+        case bio
+        case phoneNumber = "phone_number"
+        case websiteUrl = "website_url"
+        case isVerified = "is_verified"
+        case connectionCount = "connection_count"
+        case onboardingCompleted = "onboarding_completed"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case lastActiveAt = "last_active_at"
+        case bannerUrl = "banner_url" // ✅ NEW
     }
 }
+   
 
 extension AuthManager {
     func signInWithGoogle(from viewController: UIViewController) {

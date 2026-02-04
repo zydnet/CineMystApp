@@ -5,6 +5,15 @@
 //
 
 import UIKit
+import PhotosUI
+
+// MARK: - User Profile Data Model
+struct UserProfileData {
+    let profile: ProfileRecord
+    let artistProfile: ArtistProfileRecord?
+    let castingProfile: CastingProfileRecord?
+    let email: String
+}
 
 final class ProfileViewController: UIViewController {
 
@@ -20,6 +29,10 @@ final class ProfileViewController: UIViewController {
     
     // ✅ Add Button (Portfolio Management)
     private let addButton = UIButton()
+
+    // Banner and edit button
+    private let bannerImageView = UIImageView()
+    private let bannerEditButton = UIButton()
 
     private let coverLabel = UILabel()
     private let profileImageView = UIImageView()
@@ -122,7 +135,21 @@ final class ProfileViewController: UIViewController {
         loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
         loadingIndicator.hidesWhenStopped = true
         view.addSubview(loadingIndicator)
-        
+
+        // Banner setup
+        bannerImageView.backgroundColor = UIColor.systemGray4 // Default grey
+        bannerImageView.contentMode = .scaleAspectFill
+        bannerImageView.clipsToBounds = true
+        bannerImageView.translatesAutoresizingMaskIntoConstraints = false
+
+        bannerEditButton.setImage(UIImage(systemName: "pencil.circle.fill"), for: .normal)
+        bannerEditButton.tintColor = .white
+        bannerEditButton.backgroundColor = UIColor(white: 0, alpha: 0.3)
+        bannerEditButton.layer.cornerRadius = 18
+        bannerEditButton.translatesAutoresizingMaskIntoConstraints = false
+        bannerEditButton.isHidden = !isOwnProfile
+        bannerEditButton.addTarget(self, action: #selector(editBannerTapped), for: .touchUpInside)
+
         coverLabel.text = "Loading..."
         coverLabel.font = UIFont.systemFont(ofSize: 26, weight: .bold)
         coverLabel.textAlignment = .center
@@ -205,7 +232,7 @@ final class ProfileViewController: UIViewController {
         collectionView.backgroundColor = .clear
         collectionView.register(GalleryCell.self, forCellWithReuseIdentifier: "GalleryCell")
 
-        [coverLabel, profileImageView, verifiedBadge, nameLabel, usernameLabel, connectionsLabel,
+        [bannerImageView, bannerEditButton, coverLabel, profileImageView, verifiedBadge, nameLabel, usernameLabel, connectionsLabel,
          connectButton, portfolioButton, aboutTitle, aboutText, locationIcon, experienceIcon,
          locationLabel, experienceLabel, segmentControl, collectionView].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -239,11 +266,24 @@ final class ProfileViewController: UIViewController {
         NSLayoutConstraint.activate([
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            
-            coverLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+
+            // Banner at top
+            bannerImageView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            bannerImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            bannerImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            bannerImageView.heightAnchor.constraint(equalToConstant: 150),
+
+            // Edit button on banner
+            bannerEditButton.topAnchor.constraint(equalTo: bannerImageView.topAnchor, constant: 12),
+            bannerEditButton.trailingAnchor.constraint(equalTo: bannerImageView.trailingAnchor, constant: -12),
+            bannerEditButton.widthAnchor.constraint(equalToConstant: 36),
+            bannerEditButton.heightAnchor.constraint(equalToConstant: 36),
+
+            coverLabel.topAnchor.constraint(equalTo: bannerImageView.bottomAnchor, constant: 16),
             coverLabel.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
 
-            profileImageView.topAnchor.constraint(equalTo: coverLabel.bottomAnchor, constant: 16),
+            // Profile image overlaps banner
+            profileImageView.topAnchor.constraint(equalTo: bannerImageView.bottomAnchor, constant: -50),
             profileImageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             profileImageView.widthAnchor.constraint(equalToConstant: 100),
             profileImageView.heightAnchor.constraint(equalToConstant: 100),
@@ -262,17 +302,18 @@ final class ProfileViewController: UIViewController {
             connectionsLabel.topAnchor.constraint(equalTo: usernameLabel.bottomAnchor, constant: 6),
             connectionsLabel.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
 
+            // Centered portfolio button below profile info
             connectButton.topAnchor.constraint(equalTo: connectionsLabel.bottomAnchor, constant: 16),
-            connectButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 40),
+            connectButton.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             connectButton.widthAnchor.constraint(equalToConstant: 140),
             connectButton.heightAnchor.constraint(equalToConstant: 38),
 
-            portfolioButton.centerYAnchor.constraint(equalTo: connectButton.centerYAnchor),
-            portfolioButton.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -40),
+            portfolioButton.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 12),
+            portfolioButton.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             portfolioButton.widthAnchor.constraint(equalToConstant: 140),
             portfolioButton.heightAnchor.constraint(equalToConstant: 38),
 
-            aboutTitle.topAnchor.constraint(equalTo: connectButton.bottomAnchor, constant: 30),
+            aboutTitle.topAnchor.constraint(equalTo: portfolioButton.bottomAnchor, constant: 30),
             aboutTitle.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
 
             aboutText.topAnchor.constraint(equalTo: aboutTitle.bottomAnchor, constant: 6),
@@ -352,6 +393,7 @@ final class ProfileViewController: UIViewController {
                 print("✅ Profile fetched: \(profile.role)")
                 print("   Username: \(profile.username ?? "nil")")
                 print("   Full Name: \(profile.fullName ?? "nil")")
+                print("   Banner URL: \(profile.bannerUrl ?? "nil")")
                 
                 var artistProfile: ArtistProfileRecord?
                 var castingProfile: CastingProfileRecord?
@@ -396,6 +438,9 @@ final class ProfileViewController: UIViewController {
                 await MainActor.run {
                     self.userProfile = userData
                     self.updateUI(with: userData)
+                    
+                    // ✅ Load banner image if it exists
+                    self.loadBannerImage(from: profile.bannerUrl)
                     
                     // ✅ Fetch user's posts for gallery/flicks sections
                     self.fetchUserPosts(userId: userId.uuidString)
@@ -497,6 +542,35 @@ final class ProfileViewController: UIViewController {
         aboutText.text = aboutComponents.joined(separator: " ")
         
         print("✅ UI updated successfully")
+    }
+    
+    // MARK: - ✅ Load Banner Image
+    private func loadBannerImage(from urlString: String?) {
+        guard let urlString = urlString, !urlString.isEmpty, let url = URL(string: urlString) else {
+            print("⚠️ No banner URL, using default grey")
+            bannerImageView.backgroundColor = UIColor.systemGray4
+            bannerImageView.image = nil
+            return
+        }
+        
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                if let image = UIImage(data: data) {
+                    await MainActor.run {
+                        self.bannerImageView.image = image
+                        self.bannerImageView.backgroundColor = .clear
+                    }
+                    print("✅ Banner image loaded")
+                }
+            } catch {
+                print("❌ Error loading banner image: \(error)")
+                await MainActor.run {
+                    self.bannerImageView.backgroundColor = UIColor.systemGray4
+                    self.bannerImageView.image = nil
+                }
+            }
+        }
     }
     
     // MARK: - ✅ Check Portfolio Status and Update Button
@@ -676,9 +750,135 @@ final class ProfileViewController: UIViewController {
         NotificationCenter.default.removeObserver(self)
     }
     
+    // MARK: - ✅ Banner Edit Action
+    @objc private func editBannerTapped() {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
     // MARK: - Segment Control Handler
     @objc private func segmentDidChange() {
         collectionView.reloadData()
+    }
+}
+
+// MARK: - ✅ PHPickerViewControllerDelegate (Banner Upload)
+extension ProfileViewController: PHPickerViewControllerDelegate {
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        
+        guard let result = results.first else { return }
+        
+        result.itemProvider.loadObject(ofClass: UIImage.self) { [weak self] object, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ Error loading image: \(error)")
+                Task { @MainActor in
+                    self.showError(message: "Failed to load image")
+                }
+                return
+            }
+            
+            guard let image = object as? UIImage else {
+                print("❌ Could not convert to UIImage")
+                return
+            }
+            
+            // Upload banner image
+            Task {
+                await self.uploadBannerImage(image)
+            }
+        }
+    }
+    
+    private func uploadBannerImage(_ image: UIImage) async {
+        guard let userId = userProfile?.profile.id else {
+            await MainActor.run {
+                showError(message: "User profile not loaded")
+            }
+            return
+        }
+        
+        // Show loading
+        await MainActor.run {
+            loadingIndicator.startAnimating()
+        }
+        
+        do {
+            // Resize image to reasonable dimensions (1200x300 for banner)
+            let resizedImage = image.resized(to: CGSize(width: 1200, height: 300))
+            
+            guard let imageData = resizedImage.jpegData(compressionQuality: 0.8) else {
+                throw NSError(domain: "ImageError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to data"])
+            }
+            
+            // Create file path: profile-banners/{user_id}/banner.jpg
+            let fileName = "banner_\(Date().timeIntervalSince1970).jpg"
+            let filePath = "\(userId)/\(fileName)"
+            
+            print("📤 Uploading banner to: profile-banners/\(filePath)")
+            
+            // Upload to Supabase Storage
+            let uploadResponse = try await supabase.storage
+                .from("profile-banners")
+                .upload(
+                    path: filePath,
+                    file: imageData,
+                    options: .init(upsert: false)
+                )
+            
+            print("✅ Banner uploaded: \(uploadResponse)")
+            
+            // Get public URL
+            let publicURL = try supabase.storage
+                .from("profile-banners")
+                .getPublicURL(path: filePath)
+            
+            print("🔗 Banner URL: \(publicURL)")
+            
+            // Update database with new banner URL
+            let updateData: [String: String] = ["banner_url": publicURL.absoluteString]
+            try await supabase
+                .from("profiles")
+                .update(updateData)
+                .eq("id", value: userId)
+                .execute()
+            
+            print("✅ Database updated with banner URL")
+            
+            // Update UI
+            await MainActor.run {
+                self.bannerImageView.image = resizedImage
+                self.bannerImageView.backgroundColor = .clear
+                
+                // Update local profile data
+                if var profile = self.userProfile?.profile {
+                    profile.bannerUrl = publicURL.absoluteString
+                    self.userProfile = UserProfileData(
+                        profile: profile,
+                        artistProfile: self.userProfile?.artistProfile,
+                        castingProfile: self.userProfile?.castingProfile,
+                        email: self.userProfile?.email ?? ""
+                    )
+                }
+                
+                self.loadingIndicator.stopAnimating()
+                self.showSuccess(message: "Banner updated successfully!")
+            }
+            
+        } catch {
+            print("❌ Error uploading banner: \(error)")
+            await MainActor.run {
+                self.loadingIndicator.stopAnimating()
+                self.showError(message: "Failed to upload banner: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
@@ -875,10 +1075,12 @@ extension ProfileViewController {
     }
 }
 
-// MARK: - User Profile Data Model
-struct UserProfileData {
-    let profile: ProfileRecord
-    let artistProfile: ArtistProfileRecord?
-    let castingProfile: CastingProfileRecord?
-    let email: String
+// MARK: - ✅ UIImage Extension for Resizing
+extension UIImage {
+    func resized(to size: CGSize) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            self.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
 }

@@ -87,36 +87,12 @@
                             </connections>
                         </button>
                         <stackView opaque="NO" contentMode="scaleToFill" distribution="equalSpacing" alignment="center" spacing="24" translatesAutoresizingMaskIntoConstraints="NO" id="VaG-YW-Uv9">
-                            <rect key="frame" x="50" y="326.66666666666663" width="273" height="43"/>
+                            <rect key="frame" x="75" y="326.66666666666663" width="223" height="39"/>
                             <subviews>
-                                <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="UKV-NA-KUm">
-                                    <rect key="frame" x="0.0" y="0.66666666666674246" width="52" height="42"/>
-                                    <state key="normal" title="Button"/>
-                                    <buttonConfiguration key="configuration" style="plain" image="facebook"/>
-                                    <connections>
-                                        <action selector="facebookLoginTapped:" destination="-1" eventType="touchUpInside" id="lVl-Pz-VR3"/>
-                                    </connections>
-                                </button>
-                                <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="gPf-yD-4yy">
-                                    <rect key="frame" x="76" y="0.66666666666674246" width="52" height="42"/>
-                                    <state key="normal" title="Button"/>
-                                    <buttonConfiguration key="configuration" style="plain" image="Screenshot 2025-11-02 at 6.22.46 PM 1"/>
-                                    <connections>
-                                        <action selector="instagramLoginTapped:" destination="-1" eventType="touchUpInside" id="W4D-bb-4X8"/>
-                                    </connections>
-                                </button>
-                                <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Qk7-Nx-o5y">
-                                    <rect key="frame" x="152" y="0.0" width="48" height="43"/>
-                                    <state key="normal" title="Button"/>
-                                    <buttonConfiguration key="configuration" style="plain" image="Shape"/>
-                                    <connections>
-                                        <action selector="appleLoginTapped:" destination="-1" eventType="touchUpInside" id="WFg-MP-jje"/>
-                                    </connections>
-                                </button>
                                 <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="bR7-3L-NNV">
-                                    <rect key="frame" x="224" y="2" width="49" height="39"/>
+                                    <rect key="frame" x="0.0" y="0.0" width="223" height="39"/>
                                     <state key="normal" title="Button"/>
-                                    <buttonConfiguration key="configuration" style="plain" image="super-g"/>
+                                    <buttonConfiguration key="configuration" style="plain" image="super-g" title="Continue with Google" imagePadding="10"/>
                                     <connections>
                                         <action selector="googleLoginTapped:" destination="-1" eventType="touchUpInside" id="TFc-LE-dmo"/>
                                     </connections>
@@ -124,7 +100,7 @@
                             </subviews>
                         </stackView>
                         <stackView opaque="NO" contentMode="scaleToFill" alignment="center" spacing="-20" translatesAutoresizingMaskIntoConstraints="NO" id="7xP-bu-T9Y">
-                            <rect key="frame" x="50" y="377" width="273" height="34.333333333333314"/>
+                            <rect key="frame" x="50" y="373" width="273" height="34.333333333333314"/>
                             <subviews>
                                 <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Don’t have an account? " textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="ydI-ge-1Rz" userLabel="Don’t have an account?">
                                     <rect key="frame" x="0.0" y="6.9999999999999982" width="203" height="20.333333333333329"/>
@@ -195,10 +171,7 @@
         </view>
     </objects>
     <resources>
-        <image name="Screenshot 2025-11-02 at 6.22.46 PM 1" width="28" height="28"/>
-        <image name="Shape" width="24" height="29"/>
         <image name="StarGrid" width="401" height="812"/>
-        <image name="facebook" width="28" height="28"/>
         <image name="super-g" width="25" height="25"/>
         <systemColor name="darkTextColor">
             <color white="0.0" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>

@@ -15,6 +15,7 @@ class LoginViewController: UIViewController {
     @IBOutlet weak var signInButton: UIButton!
 
     private var activityIndicator: UIActivityIndicatorView!
+    private var loginTimeoutTimer: Timer?
     
     // MARK: - Gradient Layer
     private var gradientLayer: CAGradientLayer?
@@ -60,8 +61,9 @@ class LoginViewController: UIViewController {
     
     // MARK: - UI SETUP
     private func setupUI() {
-        emailTextField.keyboardType = .emailAddress
+        emailTextField.keyboardType = .default
         emailTextField.autocapitalizationType = .none
+        emailTextField.placeholder = "Username or Email"
         emailTextField.delegate = self
 
         passwordTextField.isSecureTextEntry = true
@@ -85,20 +87,21 @@ class LoginViewController: UIViewController {
     
     // MARK: - Actions
     @IBAction func signInButtonTapped(_ sender: UIButton) {
-        guard let email = emailTextField.text?.trimmingCharacters(in: .whitespaces),
-              !email.isEmpty,
+        guard let input = emailTextField.text?.trimmingCharacters(in: .whitespaces),
+              !input.isEmpty,
               let password = passwordTextField.text,
               !password.isEmpty else {
-            showAlert(message: "Please enter email and password")
+            showAlert(message: "Please enter username/email and password")
             return
         }
 
-        guard isValidEmail(email) else {
-            showAlert(message: "Enter a valid email address")
-            return
+        let isEmail = isValidEmail(input)
+        
+        if isEmail {
+            signIn(email: input, password: password)
+        } else {
+            resolveUsernameToEmail(input, password: password)
         }
-
-        signIn(email: email, password: password)
     }
     
     @IBAction func forgetPasswordButtonTapped(_ sender: UIButton) {
@@ -110,45 +113,87 @@ class LoginViewController: UIViewController {
         navigationController?.pushViewController(signUpVC, animated: true)
     }
     
-    @IBAction func facebookLoginTapped(_ sender: UIButton) {
-        showAlert(message: "Facebook Sign In coming soon")
-    }
-    
-    @IBAction func instagramLoginTapped(_ sender: UIButton) {
-        showAlert(message: "Instagram Sign In coming soon")
-    }
-    
-    @IBAction func appleLoginTapped(_ sender: UIButton) {
-        showAlert(message: "Apple Sign In coming soon")
-    }
+
     
     @IBAction func googleLoginTapped(_ sender: UIButton) {
         print("🔵 Google login button tapped")
             AuthManager.shared.signInWithGoogle(from: self)
     }
     
+    // MARK: - Resolve Username to Email
+    private func resolveUsernameToEmail(_ username: String, password: String) {
+        showLoading(true)
+        disableUI()
+        
+        Task {
+            do {
+                // ✅ Query profiles table for username to get email
+                print("🔍 Looking up username: \(username)")
+                
+                let response = try await supabase
+                    .from("profiles")
+                    .select("email")  // Get the email stored in profiles table
+                    .eq("username", value: username.lowercased())
+                    .single()
+                    .execute()
+                
+                guard let data = response.data as? [String: Any],
+                      let email = data["email"] as? String else {
+                    throw LoginError.userNotFound
+                }
+                
+                print("✅ Found email for username: \(email)")
+                
+                await MainActor.run {
+                    self.signIn(email: email, password: password)
+                }
+            } catch {
+                await MainActor.run {
+                    showLoading(false)
+                    enableUI()
+                    showAlert(message: "Username not found. Please check the username spelling or sign up first.")
+                }
+            }
+        }
+    }
+    
     // MARK: - SUPABASE LOGIN (Updated with Profile Check)
     private func signIn(email: String, password: String) {
         showLoading(true)
         disableUI()
+        
+        // Set timeout timer (15 seconds)
+        loginTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: false) { [weak self] _ in
+            self?.handleLoginTimeout()
+        }
 
         Task {
                do {
                    try await supabase.auth.signIn(email: email, password: password)
                    
-                   let hasProfile = try await checkUserProfile()
+                   // Invalidate timeout timer on success
+                   self.loginTimeoutTimer?.invalidate()
+                   self.loginTimeoutTimer = nil
+                   
+                   let isOnboardingComplete = try await checkUserProfile()
                    
                    await MainActor.run {
                        showLoading(false)
                        enableUI()
                        
-                       if hasProfile {
-                           
+                       if isOnboardingComplete {
+                           // Onboarding complete - go to dashboard
+                           self.navigateToHomeDashboard()
                        } else {
-                           navigateToOnboarding()
+                           // Onboarding not complete - start step-by-step flow
+                           self.navigateToBirthdate()
                        }
                    }
                } catch {
+                   // Invalidate timeout timer on error
+                   self.loginTimeoutTimer?.invalidate()
+                   self.loginTimeoutTimer = nil
+                   
                    await MainActor.run {
                        showLoading(false)
                        enableUI()
@@ -158,29 +203,42 @@ class LoginViewController: UIViewController {
            }
        }
     
+    private func handleLoginTimeout() {
+        DispatchQueue.main.async { [weak self] in
+            self?.showLoading(false)
+            self?.enableUI()
+            self?.showAlert(message: "Login took too long. Please check your connection and try again.")
+        }
+    }
+    
     // MARK: - Profile Check
     private func checkUserProfile() async throws -> Bool {
         guard let session = try await AuthManager.shared.currentSession() else {
+            print("❌ No session available for profile check")
             return false
         }
         
         let userId = session.user.id
+        print("🔍 Checking profile for user: \(userId)")
         
         do {
-            // Try to fetch the user's profile
             let response = try await supabase
                 .from("profiles")
-                .select()
+                .select("onboarding_completed")
                 .eq("id", value: userId.uuidString)
                 .single()
                 .execute()
             
-            // If we successfully got data, profile exists
-            let data = response.data
-            return data.count > 0
+            if let data = response.data as? [String: Any],
+               let onboardingCompleted = data["onboarding_completed"] as? Bool {
+                print("✅ Profile found - Onboarding complete: \(onboardingCompleted)")
+                return onboardingCompleted
+            } else {
+                print("⚠️ Profile exists but onboarding_completed status unclear")
+                return false
+            }
         } catch {
-            // Profile doesn't exist or error occurred
-            print("Profile check error: \(error)")
+            print("⚠️ Profile check error: \(error)")
             return false
         }
     }
@@ -231,7 +289,18 @@ class LoginViewController: UIViewController {
         }
     }
 
-
+    // MARK: - Navigation
+    
+    private func navigateToBirthdate() {
+        // Start step-by-step onboarding flow: Birthdate → Location → Profile Picture → About
+        let coordinator = OnboardingCoordinator()
+        coordinator.isPostLoginFlow = true  // Skip role selection for post-login
+        
+        let birthdayVC = BirthdayViewController()
+        birthdayVC.coordinator = coordinator
+        
+        navigationController?.pushViewController(birthdayVC, animated: true)
+    }
     
     private func navigateToOnboarding() {
         // Create onboarding coordinator
@@ -243,6 +312,22 @@ class LoginViewController: UIViewController {
         
         // Navigate to birthday screen
         navigationController?.pushViewController(birthdayVC, animated: true)
+    }
+    
+    private func navigateToHomeDashboard() {
+        let tabBarVC = CineMystTabBarController()
+        tabBarVC.modalPresentationStyle = .fullScreen
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            window.rootViewController = tabBarVC
+            window.makeKeyAndVisible()
+            
+            UIView.transition(with: window,
+                             duration: 0.5,
+                             options: .transitionCrossDissolve,
+                             animations: nil)
+        }
     }
 
     // MARK: - ERROR HANDLING
@@ -294,5 +379,22 @@ extension LoginViewController: UITextFieldDelegate {
             signInButtonTapped(signInButton)
         }
         return true
+    }
+}
+
+// MARK: - Login Errors
+enum LoginError: Error {
+    case userNotFound
+    case invalidCredentials
+}
+
+extension LoginError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .userNotFound:
+            return "User not found"
+        case .invalidCredentials:
+            return "Invalid credentials"
+        }
     }
 }

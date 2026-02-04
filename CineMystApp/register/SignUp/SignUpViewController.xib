@@ -93,20 +93,25 @@
                                 <action selector="signUpButtonTapped:" destination="-1" eventType="touchUpInside" id="PKN-2L-IoT"/>
                             </connections>
                         </button>
-                        <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Already have an account? " textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="4yT-Pm-r8j">
-                            <rect key="frame" x="50" y="450" width="303" height="20.333333333333314"/>
-                            <fontDescription key="fontDescription" type="system" pointSize="17"/>
-                            <nil key="textColor"/>
-                            <nil key="highlightedColor"/>
-                        </label>
-                        <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="See-Cj-eeF">
-                            <rect key="frame" x="201.66666666666666" y="445" width="99.333333333333343" height="34"/>
-                            <state key="normal" title="Button"/>
-                            <buttonConfiguration key="configuration" style="plain" title="Sign In"/>
-                            <connections>
-                                <action selector="signInButtonTapped:" destination="-1" eventType="touchUpInside" id="Gci-BR-B91"/>
-                            </connections>
-                        </button>
+                        <stackView opaque="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="XK0-WQ-kcO">
+                            <rect key="frame" x="50" y="450" width="275" height="34.333333333333314"/>
+                            <subviews>
+                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Already have an account? " textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="4yT-Pm-r8j">
+                                    <rect key="frame" x="0.0" y="0.0" width="199.33333333333334" height="34.333333333333336"/>
+                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                    <nil key="textColor"/>
+                                    <nil key="highlightedColor"/>
+                                </label>
+                                <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="See-Cj-eeF">
+                                    <rect key="frame" x="199.33333333333331" y="0.0" width="75.666666666666686" height="34.333333333333336"/>
+                                    <state key="normal" title="Button"/>
+                                    <buttonConfiguration key="configuration" style="plain" title="Sign In"/>
+                                    <connections>
+                                        <action selector="signInButtonTapped:" destination="-1" eventType="touchUpInside" id="Gci-BR-B91"/>
+                                    </connections>
+                                </button>
+                            </subviews>
+                        </stackView>
                     </subviews>
                     <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
                     <constraints>
@@ -114,9 +119,8 @@
                         <constraint firstItem="Xsu-ae-c2R" firstAttribute="top" secondItem="4pa-5l-N5S" secondAttribute="bottom" constant="20" id="0Tk-7D-Fcu"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="trailing" secondItem="zwT-bi-Ykc" secondAttribute="trailing" id="5oW-6t-0V4"/>
                         <constraint firstItem="zwT-bi-Ykc" firstAttribute="top" secondItem="t9q-dd-0jY" secondAttribute="top" constant="50" id="5pX-PO-5ah"/>
-                        <constraint firstAttribute="trailing" secondItem="See-Cj-eeF" secondAttribute="trailing" constant="72" id="8eo-N4-wZ9"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="trailing" secondItem="Ni9-ro-ZZa" secondAttribute="trailing" id="Crq-C6-tSN"/>
-                        <constraint firstItem="See-Cj-eeF" firstAttribute="top" secondItem="Xsu-ae-c2R" secondAttribute="bottom" constant="5" id="JZy-5v-pJ7"/>
+                        <constraint firstItem="XK0-WQ-kcO" firstAttribute="leading" secondItem="t9q-dd-0jY" secondAttribute="leading" constant="50" id="Die-L5-JJm"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="leading" secondItem="t9q-dd-0jY" secondAttribute="leading" constant="20" id="NLM-zg-gmF"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="centerX" secondItem="t9q-dd-0jY" secondAttribute="centerX" id="Nf1-Tq-Jz9"/>
                         <constraint firstItem="SyE-BJ-CcV" firstAttribute="leading" secondItem="zwT-bi-Ykc" secondAttribute="leading" id="OAw-fx-g3S"/>
@@ -124,16 +128,13 @@
                         <constraint firstItem="Ni9-ro-ZZa" firstAttribute="top" secondItem="SyE-BJ-CcV" secondAttribute="bottom" constant="40" id="Pnz-5Y-yRx"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="leading" secondItem="Xsu-ae-c2R" secondAttribute="leading" id="R4g-ku-mzJ"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="top" secondItem="Ni9-ro-ZZa" secondAttribute="bottom" constant="40" id="UPL-aQ-Lhk"/>
-                        <constraint firstItem="See-Cj-eeF" firstAttribute="leading" secondItem="4yT-Pm-r8j" secondAttribute="centerX" id="VXo-o0-Fb8"/>
+                        <constraint firstItem="XK0-WQ-kcO" firstAttribute="top" secondItem="Xsu-ae-c2R" secondAttribute="bottom" constant="10" id="ZDt-Sg-teb"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="trailing" secondItem="Xsu-ae-c2R" secondAttribute="trailing" id="awv-wi-J8n"/>
                         <constraint firstItem="SyE-BJ-CcV" firstAttribute="top" secondItem="zwT-bi-Ykc" secondAttribute="bottom" constant="40" id="bgj-V6-OfT"/>
                         <constraint firstItem="SyE-BJ-CcV" firstAttribute="trailing" secondItem="zwT-bi-Ykc" secondAttribute="trailing" id="dvu-ub-LZB"/>
                         <constraint firstAttribute="trailing" secondItem="zwT-bi-Ykc" secondAttribute="trailing" constant="20" id="hym-lQ-Miz"/>
-                        <constraint firstItem="4pa-5l-N5S" firstAttribute="trailing" secondItem="4yT-Pm-r8j" secondAttribute="trailing" id="j7J-Ww-3lo"/>
-                        <constraint firstItem="4yT-Pm-r8j" firstAttribute="top" secondItem="Xsu-ae-c2R" secondAttribute="bottom" constant="10" id="kDv-aH-a60"/>
                         <constraint firstItem="Ni9-ro-ZZa" firstAttribute="trailing" secondItem="zwT-bi-Ykc" secondAttribute="trailing" id="l7N-is-FeS"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="leading" secondItem="SyE-BJ-CcV" secondAttribute="leading" id="mDF-jc-soA"/>
-                        <constraint firstItem="4yT-Pm-r8j" firstAttribute="leading" secondItem="zwT-bi-Ykc" secondAttribute="leading" constant="30" id="qKo-Yx-w8g"/>
                         <constraint firstItem="Ni9-ro-ZZa" firstAttribute="leading" secondItem="zwT-bi-Ykc" secondAttribute="leading" id="v7Q-Gc-PcH"/>
                         <constraint firstItem="4pa-5l-N5S" firstAttribute="leading" secondItem="zwT-bi-Ykc" secondAttribute="leading" id="yUC-Hl-k5i"/>
                     </constraints>

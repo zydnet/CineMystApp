@@ -11,6 +11,7 @@ import SwiftUI
 class OnboardingCoordinator: ObservableObject {
     @Published var currentStep: OnboardingStep = .birthday
     @Published var profileData = ProfileData()
+    var isPostLoginFlow: Bool = false  // Flag to indicate if this is post-login onboarding
     
     enum OnboardingStep {
         case birthday
@@ -18,12 +19,14 @@ class OnboardingCoordinator: ObservableObject {
         case roleDetails
         case location
         case profilePicture
+        case about
     }
     
     func nextStep() {
         switch currentStep {
         case .birthday:
-            currentStep = .roleSelection
+            // If post-login flow, skip role selection and go straight to location
+            currentStep = isPostLoginFlow ? .location : .roleSelection
         case .roleSelection:
             currentStep = .roleDetails
         case .roleDetails:
@@ -31,7 +34,9 @@ class OnboardingCoordinator: ObservableObject {
         case .location:
             currentStep = .profilePicture
         case .profilePicture:
-            break
+            currentStep = .about  // New step for bio/about
+        case .about:
+            break  // Complete
         }
     }
 }
@@ -68,6 +73,9 @@ struct ProfileData {
     
     // Profile picture
     var profilePicture: UIImage?
+    
+    // About/Bio
+    var bio: String?  // New field for about/bio
 }
 
 // MARK: - User Role Enum

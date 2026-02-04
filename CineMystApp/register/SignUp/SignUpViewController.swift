@@ -90,6 +90,12 @@ class SignUpViewController: UIViewController {
             return
         }
 
+        // Validate username format
+        guard isValidUsername(username) else {
+            showAlert(message: "Username must be 3-20 characters, only letters, numbers, and underscores allowed")
+            return
+        }
+
         guard isValidEmail(email) else {
             showAlert(message: "Enter a valid email")
             return
@@ -123,6 +129,49 @@ class SignUpViewController: UIViewController {
                     ]
                 )
 
+                // ✅ NEW: Create minimal profile record immediately (for username login)
+                // Using authResponse.user (non-optional)
+                let userId = authResponse.user.id
+                print("📝 Creating initial profile record for username lookup...")
+                
+                // Get current timestamp for lastActiveAt
+                let dateFormatter = ISO8601DateFormatter()
+                let now = dateFormatter.string(from: Date())
+                
+                let initialProfile = ProfileRecordForSave(
+                    id: userId.uuidString,
+                    username: username,
+                    email: email,  // Store email for username → email resolution
+                    fullName: fullName,
+                    dateOfBirth: nil,
+                    profilePictureUrl: nil,
+                    avatarUrl: nil,  // Will be set when user uploads profile picture
+                    role: nil,  // Optional - Instagram style (set later in profile settings)
+                    employmentStatus: nil,
+                    locationState: nil,
+                    postalCode: nil,
+                    locationCity: nil,
+                    bio: nil,  // Can be added later
+                    phoneNumber: nil,  // Can be added later
+                    websiteUrl: nil,  // Can be added later
+                    isVerified: false,  // New users start unverified
+                    connectionCount: 0,  // New users have 0 connections
+                    onboardingCompleted: false,  // Not complete until role is set
+                    lastActiveAt: now,
+                    bannerUrl: nil  // ✅ ADD THIS LINE
+                    
+                )
+                
+                do {
+                    try await supabase
+                        .from("profiles")
+                        .upsert(initialProfile)
+                        .execute()
+                    print("✅ Initial profile created (username: \(username), email: \(email), onboarding_completed: false)")
+                } catch {
+                    print("⚠️ Could not create initial profile, continuing: \(error)")
+                }
+
                 await MainActor.run {
                     showLoading(false)
                     
@@ -134,29 +183,28 @@ class SignUpViewController: UIViewController {
                     } else {
                         // ✅ Check if session exists
                         if authResponse.session != nil {
-                            print("✅ Session established during signup")
-                            self.navigateToOnboarding(username: username, fullName: fullName)
+                            print("✅ Session established during signup - going to dashboard")
+                            self.navigateToDashboard()
                         } else {
-                            // ✅ No session - try signing in (old SDK method)
+                            // ✅ No session - try signing in
                             print("⚠️ No session after signup, attempting sign in...")
                             Task {
                                 do {
-                                    // ✅ FIXED: Use old SDK method signature
                                     try await supabase.auth.signIn(email: email, password: password)
                                     
                                     // ✅ Wait a moment for session to be established
-                                    try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                                    try await Task.sleep(nanoseconds: 500_000_000)
                                     
                                     await MainActor.run {
-                                        print("✅ Session created via signIn")
-                                        self.navigateToOnboarding(username: username, fullName: fullName)
+                                        print("✅ Session created via signIn - going to dashboard")
+                                        self.navigateToDashboard()
                                     }
                                 } catch {
                                     await MainActor.run {
                                         print("❌ Sign-in failed: \(error)")
                                         self.showAlert(
                                             title: "Account Created",
-                                            message: "Your account was created but we couldn't sign you in automatically. Please sign in manually."
+                                            message: "Your account was created. Please sign in manually."
                                         )
                                     }
                                 }
@@ -170,8 +218,10 @@ class SignUpViewController: UIViewController {
                     showLoading(false)
                     
                     var errorMessage = error.localizedDescription
-                    if errorMessage.contains("already registered") {
-                        errorMessage = "This email is already registered. Please sign in instead."
+                    if errorMessage.contains("already registered") || errorMessage.contains("duplicate") {
+                        errorMessage = "This email or username is already registered. Please sign in instead."
+                    } else if errorMessage.contains("username") {
+                        errorMessage = "This username is already taken. Please choose another one."
                     }
                     
                     showAlert(message: errorMessage)
@@ -180,18 +230,21 @@ class SignUpViewController: UIViewController {
         }
     }
     
-    // MARK: - Navigation to Onboarding
-    private func navigateToOnboarding(username: String, fullName: String) {
-        let coordinator = OnboardingCoordinator()
+    // ✅ LINKEDIN STYLE: Go straight to dashboard (profile setup is optional)
+    private func navigateToDashboard() {
+        let tabBarVC = CineMystTabBarController()
+        tabBarVC.modalPresentationStyle = .fullScreen
         
-        // Store username and full name
-        coordinator.profileData.username = username
-        coordinator.profileData.fullName = fullName
-        
-        let birthdayVC = BirthdayViewController()
-        birthdayVC.coordinator = coordinator
-        
-        navigationController?.pushViewController(birthdayVC, animated: true)
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            window.rootViewController = tabBarVC
+            window.makeKeyAndVisible()
+            
+            UIView.transition(with: window,
+                             duration: 0.5,
+                             options: .transitionCrossDissolve,
+                             animations: nil)
+        }
     }
     
     // MARK: - Email Confirmation Check
@@ -201,6 +254,12 @@ class SignUpViewController: UIViewController {
     }
 
     // MARK: - Helpers
+    private func isValidUsername(_ username: String) -> Bool {
+        // 3-20 characters, only letters, numbers, and underscores
+        let regex = "^[a-zA-Z0-9_]{3,20}$"
+        return NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: username)
+    }
+
     private func isValidEmail(_ email: String) -> Bool {
         let regex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
         return NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: email)

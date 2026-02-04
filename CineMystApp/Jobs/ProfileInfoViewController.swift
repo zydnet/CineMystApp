@@ -430,17 +430,30 @@ class ProfileInfoViewController: UIViewController {
         // Also save/update the main profile with location info
         // This ensures location is available for job posting
         // Use "casting_professional" as the role since "director" is not a valid role in the database
+        let dateFormatter = ISO8601DateFormatter()
+        let now = dateFormatter.string(from: Date())
+        
         let profile = ProfileRecordForSave(
             id: userId.uuidString,
             username: nil,
+            email: nil,
             fullName: nil,
             dateOfBirth: nil,
             profilePictureUrl: nil,
+            avatarUrl: nil,
             role: "casting_professional", // Use casting_professional as directors are a type of casting professional
             employmentStatus: selectedContract,
             locationState: nil,
             postalCode: nil,
-            locationCity: primaryLocation.isEmpty ? nil : primaryLocation
+            locationCity: primaryLocation.isEmpty ? nil : primaryLocation,
+            bio: nil,
+            phoneNumber: nil,
+            websiteUrl: nil,
+            isVerified: false,
+            connectionCount: 0,
+            onboardingCompleted: true,  // Director profile is considered onboarding complete
+            lastActiveAt: now,
+            bannerUrl: nil  // ✅ ADD THIS LINE
         )
         
         try await supabase
