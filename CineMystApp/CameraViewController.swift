@@ -7,6 +7,7 @@
 
 import UIKit
 import AVFoundation
+import PhotosUI
 
 enum CameraMode {
     case photo
@@ -32,6 +33,7 @@ class CameraViewController: UIViewController {
     private let captureButton = UIButton()
     private let timerLabel = UILabel()
     private let flashButton = UIButton()
+    private let galleryButton = UIButton()
     private var progressRingShapeLayer = CAShapeLayer()
     
     // MARK: - Lifecycle
@@ -137,6 +139,18 @@ class CameraViewController: UIViewController {
             flashButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             flashButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16)
         ])
+        
+        // Gallery Button
+        galleryButton.setImage(UIImage(systemName: "photo.on.rectangle"), for: .normal)
+        galleryButton.tintColor = .white
+        galleryButton.translatesAutoresizingMaskIntoConstraints = false
+        galleryButton.addTarget(self, action: #selector(openGallery), for: .touchUpInside)
+        view.addSubview(galleryButton)
+        
+        NSLayoutConstraint.activate([
+            galleryButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            galleryButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16)
+        ])
 
         // Timer Label
         timerLabel.text = "0:00"
@@ -211,6 +225,24 @@ class CameraViewController: UIViewController {
         try? device.lockForConfiguration()
         device.torchMode = device.torchMode == .on ? .off : .on
         device.unlockForConfiguration()
+    }
+    
+    @objc private func openGallery() {
+        let uploadVC = FlickUploadViewController()
+        uploadVC.modalPresentationStyle = .fullScreen
+        
+        // Dismiss camera and present upload options
+        dismiss(animated: true) {
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let window = windowScene.windows.first,
+               let rootVC = window.rootViewController {
+                var topVC = rootVC
+                while let presented = topVC.presentedViewController {
+                    topVC = presented
+                }
+                topVC.present(uploadVC, animated: true)
+            }
+        }
     }
 
     @objc private func capturePhoto() {
@@ -292,8 +324,43 @@ extension CameraViewController: AVCaptureFileOutputRecordingDelegate {
             return
         }
 
-        let media = DraftMedia(image: nil, videoURL: outputFileURL, type: .video)
-        passMediaToComposer([media])
+        // Show options: Post to Feed or Flicks
+        showPostOptions(videoURL: outputFileURL)
+    }
+    
+    private func showPostOptions(videoURL: URL) {
+        let alert = UIAlertController(
+            title: "Post Video",
+            message: "Where would you like to post this video?",
+            preferredStyle: .actionSheet
+        )
+        
+        alert.addAction(UIAlertAction(title: "Post to Feed", style: .default) { [weak self] _ in
+            let media = DraftMedia(image: nil, videoURL: videoURL, type: .video)
+            self?.passMediaToComposer([media])
+        })
+        
+        alert.addAction(UIAlertAction(title: "Post to Flicks", style: .default) { [weak self] _ in
+            self?.postToFlicks(videoURL: videoURL)
+        })
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+            // Delete temporary video
+            try? FileManager.default.removeItem(at: videoURL)
+        })
+        
+        present(alert, animated: true)
+    }
+    
+    private func postToFlicks(videoURL: URL) {
+        dismiss(animated: true) { [weak self] in
+            let flickComposer = FlickComposerViewController(videoURL: videoURL)
+            flickComposer.modalPresentationStyle = .fullScreen
+            
+            if let parent = self?.presentingViewController {
+                parent.present(flickComposer, animated: true)
+            }
+        }
     }
 }
 
