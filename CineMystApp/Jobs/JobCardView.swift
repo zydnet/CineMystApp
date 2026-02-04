@@ -102,8 +102,11 @@ class JobCardView: UIView {
         companyTagLabel.layer.cornerRadius = 12
         companyTagLabel.clipsToBounds = true
         companyTagLabel.textAlignment = .center
+        companyTagLabel.numberOfLines = 1
+        companyTagLabel.baselineAdjustment = .alignCenters
         companyTagLabel.translatesAutoresizingMaskIntoConstraints = false
         companyTagLabel.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        companyTagLabel.adjustsFontSizeToFitWidth = false
         
         // Bookmark button - top right floating
         bookmarkButton.setImage(UIImage(systemName: "bookmark"), for: .normal)
@@ -163,7 +166,8 @@ class JobCardView: UIView {
             companyTagLabel.leadingAnchor.constraint(equalTo: companyContainer.leadingAnchor),
             companyTagLabel.topAnchor.constraint(equalTo: companyContainer.topAnchor),
             companyTagLabel.bottomAnchor.constraint(equalTo: companyContainer.bottomAnchor),
-            companyTagLabel.trailingAnchor.constraint(lessThanOrEqualTo: companyContainer.trailingAnchor)
+            companyTagLabel.trailingAnchor.constraint(lessThanOrEqualTo: companyContainer.trailingAnchor),
+            companyTagLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 80)
         ])
         
         let titleStack = UIStackView(arrangedSubviews: [titleLabel, companyContainer])

@@ -126,6 +126,7 @@ final class ReelCell: UICollectionViewCell {
         iv.translatesAutoresizingMaskIntoConstraints = false
         iv.contentMode = .scaleAspectFill
         iv.backgroundColor = .darkGray
+        iv.isUserInteractionEnabled = true
         return iv
     }()
     
@@ -387,6 +388,13 @@ final class ReelCell: UICollectionViewCell {
         let nameTap = UITapGestureRecognizer(target: self, action: #selector(handleNameTap))
         nameLabel.addGestureRecognizer(nameTap)
         
+        // Add tap gesture to avatar for profile navigation
+        let avatarTap = UITapGestureRecognizer(target: self, action: #selector(handleNameTap))
+        avatarImageView.addGestureRecognizer(avatarTap)
+        
+        // Add action to follow button
+        connectButton.addTarget(self, action: #selector(handleFollow), for: .touchUpInside)
+        
         // Add button actions
         if let likeBtn = likeButton.arrangedSubviews.first as? UIButton {
             likeBtn.addTarget(self, action: #selector(handleLike), for: .touchUpInside)
@@ -406,6 +414,12 @@ final class ReelCell: UICollectionViewCell {
     @objc private func handleNameTap() {
         guard let userId = currentUserId else { return }
         delegate?.didTapProfile(on: self, userId: userId)
+    }
+    
+    @objc private func handleFollow() {
+        connectButton.setTitle("Request sent", for: .normal)
+        connectButton.isEnabled = false
+        connectButton.alpha = 0.7
     }
     
     @objc private func handleTap() {

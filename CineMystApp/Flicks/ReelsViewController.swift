@@ -413,11 +413,8 @@ extension ReelsViewController: ReelCellDelegate {
         profileVC.viewingUserId = userId
         profileVC.hidesBottomBarWhenPushed = true
         
-        // Get navigation controller from tab bar controller
-        if let tabBarController = self.tabBarController,
-           let navController = tabBarController.viewControllers?.first as? UINavigationController {
-            navController.pushViewController(profileVC, animated: true)
-        }
+        // Push to current navigation controller
+        navigationController?.pushViewController(profileVC, animated: true)
     }
 }
 
