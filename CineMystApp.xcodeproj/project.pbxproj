@@ -16,26 +16,26 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		5B9C89052EC2D95200A0F1F1 /* CineMyst.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CineMyst.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5B9C89052EC2D95200A0F1F1 /* CineMystApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CineMystApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		5B9C89172EC2D95400A0F1F1 /* Exceptions for "CineMyst" folder in "CineMyst" target */ = {
+		5B9C89172EC2D95400A0F1F1 /* Exceptions for "CineMystApp" folder in "CineMystApp" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 5B9C89042EC2D95200A0F1F1 /* CineMyst */;
+			target = 5B9C89042EC2D95200A0F1F1 /* CineMystApp */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		5B9C89072EC2D95200A0F1F1 /* CineMyst */ = {
+		5B9C89072EC2D95200A0F1F1 /* CineMystApp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				5B9C89172EC2D95400A0F1F1 /* Exceptions for "CineMyst" folder in "CineMyst" target */,
+				5B9C89172EC2D95400A0F1F1 /* Exceptions for "CineMystApp" folder in "CineMystApp" target */,
 			);
-			path = CineMyst;
+			path = CineMystApp;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -60,7 +60,7 @@
 		5B9C88FC2EC2D95200A0F1F1 = {
 			isa = PBXGroup;
 			children = (
-				5B9C89072EC2D95200A0F1F1 /* CineMyst */,
+				5B9C89072EC2D95200A0F1F1 /* CineMystApp */,
 				5B9C89062EC2D95200A0F1F1 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -68,7 +68,7 @@
 		5B9C89062EC2D95200A0F1F1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5B9C89052EC2D95200A0F1F1 /* CineMyst.app */,
+				5B9C89052EC2D95200A0F1F1 /* CineMystApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,9 +76,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		5B9C89042EC2D95200A0F1F1 /* CineMyst */ = {
+		5B9C89042EC2D95200A0F1F1 /* CineMystApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 5B9C89182EC2D95400A0F1F1 /* Build configuration list for PBXNativeTarget "CineMyst" */;
+			buildConfigurationList = 5B9C89182EC2D95400A0F1F1 /* Build configuration list for PBXNativeTarget "CineMystApp" */;
 			buildPhases = (
 				5B9C89012EC2D95200A0F1F1 /* Sources */,
 				5B9C89022EC2D95200A0F1F1 /* Frameworks */,
@@ -89,9 +89,9 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				5B9C89072EC2D95200A0F1F1 /* CineMyst */,
+				5B9C89072EC2D95200A0F1F1 /* CineMystApp */,
 			);
-			name = CineMyst;
+			name = CineMystApp;
 			packageProductDependencies = (
 				5BC9E4842ECDF98B0081F195 /* Auth */,
 				5BC9E4862ECDF98B0081F195 /* Functions */,
@@ -101,7 +101,7 @@
 				5BC9E48E2ECDF98B0081F195 /* Supabase */,
 			);
 			productName = CineMystApp;
-			productReference = 5B9C89052EC2D95200A0F1F1 /* CineMyst.app */;
+			productReference = 5B9C89052EC2D95200A0F1F1 /* CineMystApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -119,7 +119,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 5B9C89002EC2D95200A0F1F1 /* Build configuration list for PBXProject "CineMyst" */;
+			buildConfigurationList = 5B9C89002EC2D95200A0F1F1 /* Build configuration list for PBXProject "CineMystApp" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -136,7 +136,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				5B9C89042EC2D95200A0F1F1 /* CineMyst */,
+				5B9C89042EC2D95200A0F1F1 /* CineMystApp */,
 			);
 		};
 /* End PBXProject section */
@@ -171,7 +171,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = JUNF53WL4F;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = CineMyst/Info.plist;
+				INFOPLIST_FILE = CineMystApp/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "CineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs to access your camera";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "CineMyst needs to access your photos to add them to the app";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -185,7 +185,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.iDevs.CineMyst;
+				PRODUCT_BUNDLE_IDENTIFIER = name.iDevs.CineMystApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -202,7 +202,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = JUNF53WL4F;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = CineMyst/Info.plist;
+				INFOPLIST_FILE = CineMystApp/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "CineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs access to your camera to capture stories and flicks.\nCineMyst needs to access your camera";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "CineMyst needs to access your photos to add them to the app";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -216,7 +216,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = name.iDevs.CineMyst;
+				PRODUCT_BUNDLE_IDENTIFIER = name.iDevs.CineMystApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -226,7 +226,7 @@
 		};
 		5B9C891B2EC2D95400A0F1F1 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 5B9C89072EC2D95200A0F1F1 /* CineMyst */;
+			baseConfigurationReferenceAnchor = 5B9C89072EC2D95200A0F1F1 /* CineMystApp */;
 			baseConfigurationReferenceRelativePath = Secrets.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -291,7 +291,7 @@
 		};
 		5B9C891C2EC2D95400A0F1F1 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReferenceAnchor = 5B9C89072EC2D95200A0F1F1 /* CineMyst */;
+			baseConfigurationReferenceAnchor = 5B9C89072EC2D95200A0F1F1 /* CineMystApp */;
 			baseConfigurationReferenceRelativePath = Secrets.xcconfig;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -350,7 +350,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5B9C89002EC2D95200A0F1F1 /* Build configuration list for PBXProject "CineMyst" */ = {
+		5B9C89002EC2D95200A0F1F1 /* Build configuration list for PBXProject "CineMystApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5B9C891B2EC2D95400A0F1F1 /* Debug */,
@@ -359,7 +359,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		5B9C89182EC2D95400A0F1F1 /* Build configuration list for PBXNativeTarget "CineMyst" */ = {
+		5B9C89182EC2D95400A0F1F1 /* Build configuration list for PBXNativeTarget "CineMystApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				5B9C89192EC2D95400A0F1F1 /* Debug */,
