@@ -22,6 +22,8 @@
 	<string>$(SUPABASE_KEY)</string>
 	<key>SUPABASE_URL</key>
 	<string>https://kyhyunyobgouumgwcigk.supabase.co</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CineMyst needs access to your microphone to record audio for videos and flicks.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

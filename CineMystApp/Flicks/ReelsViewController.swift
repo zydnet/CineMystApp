@@ -28,10 +28,22 @@ final class ReelsViewController: UIViewController {
     
     private let createButton: UIButton = {
         let btn = UIButton(type: .system)
-        btn.setImage(UIImage(systemName: "plus"), for: .normal)
-        btn.tintColor = .white
-        btn.backgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
-        btn.layer.cornerRadius = 8
+        
+        var config = UIButton.Configuration.filled()
+        config.baseBackgroundColor = UIColor(red: 67/255, green: 22/255, blue: 49/255, alpha: 1)
+        config.baseForegroundColor = .white
+        config.cornerStyle = .medium
+        config.image = UIImage(systemName: "plus")
+        config.imagePlacement = .leading
+        config.imagePadding = 6
+        config.contentInsets = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+        
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 14, weight: .semibold)
+        ]
+        config.attributedTitle = AttributedString("Create Flick", attributes: AttributeContainer(titleAttributes))
+        
+        btn.configuration = config
         btn.layer.shadowColor = UIColor.black.cgColor
         btn.layer.shadowOpacity = 0.3
         btn.layer.shadowOffset = CGSize(width: 0, height: 2)
@@ -86,8 +98,7 @@ final class ReelsViewController: UIViewController {
         NSLayoutConstraint.activate([
             createButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             createButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            createButton.widthAnchor.constraint(equalToConstant: 44),
-            createButton.heightAnchor.constraint(equalToConstant: 44)
+            createButton.heightAnchor.constraint(equalToConstant: 36)
         ])
     }
     
